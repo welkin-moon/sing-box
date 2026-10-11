@@ -60,15 +60,15 @@ func newTestController(t *testing.T, initial string) *testController {
 				return
 			}
 			c.puts = append(c.puts, body.Name)
-			select {
-			case c.putNotify <- body.Name:
-			default:
-			}
 			if c.failRollback && len(c.puts) == 2 {
 				http.Error(w, "rollback refused", http.StatusInternalServerError)
 				return
 			}
 			c.now = body.Name
+			select {
+			case c.putNotify <- body.Name:
+			default:
+			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -160,59 +160,57 @@ func newConnectProxy(t *testing.T) (*httptest.Server, *atomic.Bool) {
 	return server, &allow
 }
 
-func newOneShotBlockingProxy(t *testing.T, started, canceled chan struct{}) *httptest.Server {
+func newSelectiveBlockingProxy(t *testing.T, blockedHost string, started, canceled chan struct{}) *httptest.Server {
 	t.Helper()
-	var block atomic.Bool
-	block.Store(true)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodConnect {
 			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
 			return
 		}
-		if block.CompareAndSwap(true, false) {
-			started <- struct{}{}
-			<-r.Context().Done()
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "hijacking unavailable", http.StatusInternalServerError)
+			return
+		}
+		client, rw, err := hijacker.Hijack()
+		if err != nil {
+			return
+		}
+		if r.Host == blockedHost {
+			_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+			if rw.Flush() == nil {
+				started <- struct{}{}
+				_, _ = io.Copy(io.Discard, client)
+			}
+			_ = client.Close()
 			close(canceled)
 			return
 		}
-		serveTunnel(w, r)
+		upstream, err := net.DialTimeout("tcp", r.Host, 2*time.Second)
+		if err != nil {
+			_ = client.Close()
+			return
+		}
+		if _, err = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+			_ = client.Close()
+			_ = upstream.Close()
+			return
+		}
+		if err = rw.Flush(); err != nil {
+			_ = client.Close()
+			_ = upstream.Close()
+			return
+		}
+		go func() {
+			_, _ = io.Copy(upstream, rw)
+			_ = upstream.Close()
+		}()
+		_, _ = io.Copy(client, upstream)
+		_ = client.Close()
+		_ = upstream.Close()
 	}))
 	t.Cleanup(server.Close)
 	return server
-}
-
-func serveTunnel(w http.ResponseWriter, r *http.Request) {
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "hijacking unavailable", http.StatusInternalServerError)
-		return
-	}
-	client, rw, err := hijacker.Hijack()
-	if err != nil {
-		return
-	}
-	upstream, err := net.DialTimeout("tcp", r.Host, 2*time.Second)
-	if err != nil {
-		_ = client.Close()
-		return
-	}
-	if _, err = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-		_ = client.Close()
-		_ = upstream.Close()
-		return
-	}
-	if err = rw.Flush(); err != nil {
-		_ = client.Close()
-		_ = upstream.Close()
-		return
-	}
-	go func() {
-		_, _ = io.Copy(upstream, rw)
-		_ = upstream.Close()
-	}()
-	_, _ = io.Copy(client, upstream)
-	_ = client.Close()
-	_ = upstream.Close()
 }
 
 func makeEngine(t *testing.T, controllerURL string, candidates []model.Candidate, probes []model.Probe, failures, recoveries, hold int) *Engine {
@@ -306,19 +304,24 @@ func TestNoDirectFallbackWhenProxyUnavailable(t *testing.T) {
 func TestIncrementalSelectionCompletesFastCandidateWhileOneRequestBlocks(t *testing.T) {
 	started := make(chan struct{}, 1)
 	blockedCanceled := make(chan struct{})
-	blockingProxy := newOneShotBlockingProxy(t, started, blockedCanceled)
 	fastProxy, _ := newConnectProxy(t)
 	target, roots := newTestTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "healthy")
 	}))
+	blockingProxy := newSelectiveBlockingProxy(t, strings.TrimPrefix(target.URL, "https://"), started, blockedCanceled)
 	controller := newTestController(t, "slow")
-	probes := []model.Probe{probeFor(target.URL), probeFor(target.URL), probeFor(target.URL)}
+	probes := []model.Probe{probeFor(target.URL)}
 	e := makeEngine(t, controller.server.URL, []model.Candidate{
 		{Tag: "slow", ProxyURL: blockingProxy.URL, Priority: 20},
 		{Tag: "fast", ProxyURL: fastProxy.URL, Priority: 10},
 	}, probes, 1, 1, 0)
 	trustTestServer(t, e, roots)
+	// Simulate the current route having failed the preceding round. A route
+	// with no completed failure must be retained until its failure threshold
+	// is reached; this test instead checks recovery while that failed route's
+	// next attempt is still blocked.
 	e.policies["main"].byTag["slow"].state.Failures = 1
+	e.policies["main"].byTag["slow"].state.CheckedAt = time.Now()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	probeDone := make(chan error, 1)
