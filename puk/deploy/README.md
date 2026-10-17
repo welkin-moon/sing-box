@@ -34,3 +34,9 @@ GitHub Issues was disabled on welkin-moon/sing-box at the time of deployment (is
 - Enforce secure central subscription access if the current /sub/ssN URL is guessable; plan migration.
 - Test real Google-WARP / All-WARP egress and independent IPv6 before enabling corresponding matrix entries.
 - Add application-aware end-to-end tests and a quality-scoring control plane; no false passing URL tests.
+
+## IPv6 listener and per-family DNS checkpoint
+
+2026-10-17 external testing from MSDT established that JPX's REALITY TCP 11443 was reachable over its IPv6 address, but the HTTPS health endpoint on IPv6 TCP 443 timed out. Inspection of the origin nginx vhost showed only an IPv4 443 listener. The Cloudflare zone now has separate DNS-only records: jpx4 (A only), jpx6 (AAAA only), jpxdual (both A and AAAA); none should be advertised as a tested TCP Brutal route yet.
+
+The included enable_jpx_nginx_ipv6.py adds a bracketed IPv6 443 SSL listener while preserving the existing hostname, TLS certificate and protected subscription source. It retains a backup, validates nginx -t before reload and restores the previous configuration on errors. Run with --check-only first. Five offline tests passed on Windows/CXL Python 3.12. Applying this fix to the origin and running external IPv6 HTTPS verification are still pending because post-reboot SSH authentication could not be completed. An open IPv6 TCP port is not the same as successful proxy authentication and application routing.
