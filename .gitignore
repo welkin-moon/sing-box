@@ -21,3 +21,13 @@
 CLAUDE.md
 AGENTS.md
 /.claude/
+
+# Local PUK credentials and generated runtimes
+*.private.json
+*.private.txt
+/puk/dist/
+/puk-bond-private/
+
+# Python packaging helpers
+__pycache__/
+*.pyc
