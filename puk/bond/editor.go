@@ -32,7 +32,11 @@ func Compile(raw []byte) (map[string]any, error) {
 	if e != nil {
 		return nil, e
 	}
-	return map[string]any{"library": l, "config": c, "server": l.ServerTemplate()}, nil
+	android, err := l.AndroidConfig()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"library": l, "config": c, "android_config": android, "server": l.ServerTemplate()}, nil
 }
 func editorHandler(token string, runners ...*Runner) http.Handler {
 	var runner *Runner

@@ -3,6 +3,8 @@
 基于 sing-box 的独立 Go 控制模块，保留上游核心与普通订阅兼容性。
 不依赖 Workers、DO、R2 或中心服务器进行实时择路。
 
+整体模块划分、BBR 基线优先级及未完成能力见[系统设计与交付顺序](ARCHITECTURE.md)。
+
 新增的 [上下行分离实验客户端](split/README.md) 通过 XHTTP 关联 CF 上传和 HY2 下载，
 提供 Windows x64 启动器及 Android arm64 Throne 完整配置；[验证记录](split/VERIFICATION.md) 列出已测项目与限制。
 
@@ -20,7 +22,7 @@
 
 ## 构建与运行
 
-Go 1.23+，模块不需要第三方 Go 依赖。
+Go 1.23+；原生 Bond 的 WebSocket 载体使用已固定版本的 coder/websocket。
 
 ```sh
 cd puk

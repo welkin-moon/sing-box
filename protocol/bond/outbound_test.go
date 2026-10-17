@@ -29,6 +29,28 @@ import (
 	B "github.com/welkin-moon/sing-box/puk/bond"
 )
 
+func TestGeneratedAndroidConfigParses(t *testing.T) {
+	l, err := B.Load(B.ExampleLibrary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := l.AndroidConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var opts option.Options
+	if err = json.UnmarshalContext(include.Context(t.Context()), raw, &opts); err != nil {
+		t.Fatal(err)
+	}
+	if len(opts.Inbounds) != 1 || opts.Inbounds[0].Type != "tun" {
+		t.Fatal("Android VPN ingress missing")
+	}
+}
+
 func TestNativeOutboundWithSelectorAndChain(t *testing.T) {
 	ctx := t.Context()
 	secret := strings.Repeat("ab", 32)

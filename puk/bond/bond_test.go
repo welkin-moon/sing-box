@@ -370,3 +370,41 @@ func TestIndependentServerListeners(t *testing.T) {
 		t.Fatal("public plaintext WS listener accepted")
 	}
 }
+
+func TestAndroidVPNAndDNSBootstrap(t *testing.T) {
+	l, e := Load(ExampleLibrary)
+	if e != nil {
+		t.Fatal(e)
+	}
+	c, e := l.AndroidConfig()
+	if e != nil {
+		t.Fatal(e)
+	}
+	in := c["inbounds"].([]any)
+	if len(in) != 1 || in[0].(map[string]any)["type"] != "tun" {
+		t.Fatal("Android requires a VPN ingress")
+	}
+	dns := c["dns"].(map[string]any)
+	servers := dns["servers"].([]any)
+	if servers[1].(map[string]any)["type"] != "https" || servers[1].(map[string]any)["detour"] != "PUK-Bond" {
+		t.Fatal("DNS must work through the TCP-only data plane")
+	}
+	if c["route"].(map[string]any)["default_domain_resolver"] != "puk-bootstrap" {
+		t.Fatal("carrier DNS must not recurse through itself")
+	}
+	desktop, e := l.NativeConfig()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if desktop["inbounds"].([]any)[0].(map[string]any)["type"] != "mixed" {
+		t.Fatal("Android export mutated desktop config")
+	}
+	l.Core["dns"] = map[string]any{"servers": []any{map[string]any{"type": "local", "tag": "user-dns"}}, "final": "user-dns"}
+	custom, e := l.AndroidConfig()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if custom["dns"].(map[string]any)["final"] != "user-dns" {
+		t.Fatal("imported DNS choice was overwritten")
+	}
+}
