@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: puk-bond-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -36,14 +36,20 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -trimpath -o ../dist/puk-bond.exe ./cmd/puk-bond
           GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o ../dist/compiler.wasm ./cmd/puk-bond-web
           python bond/build_offline.py --wasm ../dist/compiler.wasm --wasm-exec "$(go env GOROOT)/lib/wasm/wasm_exec.js" --out ../dist/PUK-Bond-Editor.html
-          cp bond/README.md bond/VERIFICATION.md bond/PROTOCOL.md bond/library.example.json bond/puk-bond.service ../dist/
+          cp bond/README.md bond/VERIFICATION.md bond/PROTOCOL.md bond/library.example.json bond/puk-bond.service bond/package.py ../dist/
           cp ../LICENSE ../dist/LICENSE
           cd ../dist
           sha256sum * > SHA256SUMS
+          cd ..
+          python puk/bond/package.py --tools dist --out bundles
       - uses: actions/upload-artifact@v4
         with:
           name: puk-bond-native-public
           path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: puk-bond-ready-packages
+          path: bundles/
   android:
     needs: verify
     runs-on: ubuntu-latest

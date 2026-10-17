@@ -354,3 +354,19 @@ func TestWSBackpressureDoesNotInvalidateSession(t *testing.T) {
 	c.Write([]byte{1})
 	<-done
 }
+
+func TestIndependentServerListeners(t *testing.T) {
+	l, e := Load(ExampleLibrary)
+	if e != nil {
+		t.Fatal(e)
+	}
+	s := l.ServerTemplate()
+	s.Listeners = append(s.Listeners, Listener{Kind: "tls", Listen: "0.0.0.0:18443", Certificate: "/etc/puk-bond/tls.crt", Key: "/etc/puk-bond/tls.key"})
+	if e = s.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	s.Listeners[1].Listen = "0.0.0.0:18086"
+	if e = s.Validate(); e == nil {
+		t.Fatal("public plaintext WS listener accepted")
+	}
+}

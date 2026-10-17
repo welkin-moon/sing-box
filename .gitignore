@@ -27,3 +27,7 @@ AGENTS.md
 *.private.txt
 /puk/dist/
 /puk-bond-private/
+
+# Python packaging helpers
+__pycache__/
+*.pyc

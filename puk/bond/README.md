@@ -16,6 +16,13 @@ flowchart LR
 出口 IP 相同只是必要条件之一：必须进入同一汇合进程。两个独立进程即使共用公网 IP 和密钥，
 也不会共享会话。负载均衡需将同一会话的两路送到同一实例；当前版本未实现跨实例会话共享。
 
+## 复用模块
+
+独立 Go 模块路径为 `github.com/welkin-moon/sing-box/puk`，以本功能分支的提交号作为 Go 版本查询。
+`bond.Client` 接受独立的上传/下载拨号函数，`bond.Hub` 接受可注入的服务端出口拨号器。
+其他客户端可接入自己的内核及 Android 套接字保护；原生适配器位于 `protocol/bond`。
+主模块已固定公开可获取的 SDK 版本，不依赖别人的机器上存在 `./puk` 路径；本仓库开发使用本地 replace。
+
 ## 客户端选择
 
 运行 `puk-bond ui --core /path/to/sing-box`，打开终端显示的本地链接；或者打开离线 `PUK-Bond-Editor.html`。
@@ -41,6 +48,9 @@ flowchart LR
 
 表中的回环地址相对于**最后一个代理服务器**；例如最后一个代理在日本，则需让它能访问
 日本本机的汇合端口。CF 不只一种接法：可使用原有代理配置档，也可使用模块的独立 WS 适配器。
+通道配置档提供的是到汇合端的路线，网站出口策略由服务端 `exit_chain` 决定；
+可接到 s-ui 对应 direct / Google-WARP / all-WARP 策略的本地 SOCKS 入口，不能从入口名称自动继承网站出口。
+
 服务器名称、路径、地址均由用户填写，示例域名及文档网段没有实际服务。
 
 当前选择在生成配置、应用配置时生效。已有 sing-box selector 可继续运行时选节点；
@@ -90,7 +100,8 @@ systemctl enable --now puk-bond
 默认两个入口：TCP `127.0.0.1:18085`，WS `127.0.0.1:18086/puk-bond`。
 CF Tunnel 可将一个自选域名映射到 `http://127.0.0.1:18086`；客户端选相应的 `wss://` URL。
 HY2/Reality 通道直接连接最终 VPS 的回环 TCP 入口。
-如需公网直接接入，在服务端 JSON 填 `certificate`、`key`，把 `listen` 改为公网监听地址和空闲端口；
+如需公网直接接入，在服务端 JSON 的 `listeners` 中追加 `kind: "tls"` 监听模块，
+填写该模块自己的 `certificate`、`key` 和公网 `listen` 地址；现有 TCP / WS 回环入口可同时保留。
 客户端使用 `tls://`。自签证书需要正确 SAN、有效期，以及客户端对应的证书 DER SHA-256 指纹。
 不会默认跳过服务端身份验证，也不会自动修改防火墙、CF Tunnel 或重启 s-ui。
 

@@ -16,71 +16,61 @@ func (s ServerConfig) Run(ctx context.Context) error {
 	}
 	h := &Hub{ID: s.ID, Users: s.Users, MaxSessions: s.MaxSessions, Dial: ChainDialer(nil, s.ExitChain)}
 	defer h.Close()
-	var tlsConfig *tls.Config
-	if s.Certificate != "" {
-		cert, e := tls.LoadX509KeyPair(s.Certificate, s.Key)
-		if e != nil {
-			return e
-		}
-		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
-	}
+	options := s.listeners()
 	var listeners []net.Listener
 	defer func() {
 		for _, l := range listeners {
 			l.Close()
 		}
 	}()
-	for _, a := range []string{s.Listen, s.WSListen} {
-		if a == "" {
-			continue
+	for _, l := range options {
+		var tc *tls.Config
+		if l.Kind == "tls" || l.Kind == "wss" {
+			cert, e := tls.LoadX509KeyPair(l.Certificate, l.Key)
+			if e != nil {
+				return e
+			}
+			tc = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 		}
-		ln, e := net.Listen("tcp", a)
+		ln, e := net.Listen("tcp", l.Listen)
 		if e != nil {
 			return e
 		}
-		if tlsConfig != nil {
-			ln = tls.NewListener(ln, tlsConfig)
+		if tc != nil {
+			ln = tls.NewListener(ln, tc)
 		}
 		listeners = append(listeners, ln)
 	}
-	errs := make(chan error, 2)
-	i := 0
-	var hs *http.Server
-	if s.Listen != "" {
+	errs := make(chan error, len(options))
+	var servers []*http.Server
+	defer func() {
+		for _, s := range servers {
+			s.Close()
+		}
+	}()
+	for i, l := range options {
 		ln := listeners[i]
-		i++
-		go func() {
-			slots := make(chan struct{}, 64)
-			for {
-				c, e := ln.Accept()
-				if e != nil {
-					errs <- e
-					return
+		if l.Kind == "ws" || l.Kind == "wss" {
+			server := &http.Server{Handler: h.WebSocketHandlers(append([]string{l.Path}, l.Paths...)), ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16384}
+			servers = append(servers, server)
+			go func() { errs <- server.Serve(ln) }()
+		} else {
+			go func() {
+				for {
+					c, e := ln.Accept()
+					if e != nil {
+						errs <- e
+						return
+					}
+					go h.ServeConn(c)
 				}
-				select {
-				case slots <- struct{}{}:
-					go func() { defer func() { <-slots }(); h.ServeConn(c) }()
-				default:
-					c.Close()
-				}
-			}
-		}()
-	}
-	if s.WSListen != "" {
-		hs = &http.Server{Handler: h.WebSocketHandlers(append([]string{s.WSPath}, s.WSPaths...)), ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16384}
-		ln := listeners[i]
-		go func() { errs <- hs.Serve(ln) }()
+			}()
+		}
 	}
 	select {
 	case <-ctx.Done():
-		if hs != nil {
-			hs.Close()
-		}
 		return nil
 	case e := <-errs:
-		if hs != nil {
-			hs.Close()
-		}
 		return e
 	}
 }

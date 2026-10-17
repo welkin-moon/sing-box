@@ -8,19 +8,50 @@ import (
 	"strings"
 )
 
+type Listener struct {
+	Kind        string   `json:"kind"`
+	Listen      string   `json:"listen"`
+	Path        string   `json:"path,omitempty"`
+	Paths       []string `json:"paths,omitempty"`
+	Certificate string   `json:"certificate,omitempty"`
+	Key         string   `json:"key,omitempty"`
+}
 type ServerConfig struct {
-	WSPaths     []string          `json:"ws_paths,omitempty"`
-	ID          string            `json:"id"`
-	Users       map[string]string `json:"users"`
-	Listen      string            `json:"listen"`
-	WSListen    string            `json:"ws_listen"`
-	WSPath      string            `json:"ws_path"`
-	Certificate string            `json:"certificate,omitempty"`
-	Key         string            `json:"key,omitempty"`
-	ExitChain   []Hop             `json:"exit_chain,omitempty"`
-	MaxSessions int               `json:"max_sessions,omitempty"`
+	ID        string            `json:"id"`
+	Users     map[string]string `json:"users"`
+	Listeners []Listener        `json:"listeners,omitempty"`
+	// v1 CLI compatibility; new templates use independent listener modules.
+	Listen      string   `json:"listen,omitempty"`
+	WSListen    string   `json:"ws_listen,omitempty"`
+	WSPath      string   `json:"ws_path,omitempty"`
+	WSPaths     []string `json:"ws_paths,omitempty"`
+	Certificate string   `json:"certificate,omitempty"`
+	Key         string   `json:"key,omitempty"`
+	ExitChain   []Hop    `json:"exit_chain,omitempty"`
+	MaxSessions int      `json:"max_sessions,omitempty"`
 }
 
+func (s ServerConfig) listeners() []Listener {
+	if len(s.Listeners) > 0 {
+		return s.Listeners
+	}
+	var a []Listener
+	kind := "tcp"
+	if s.Certificate != "" {
+		kind = "tls"
+	}
+	if s.Listen != "" {
+		a = append(a, Listener{Kind: kind, Listen: s.Listen, Certificate: s.Certificate, Key: s.Key})
+	}
+	kind = "ws"
+	if s.Certificate != "" {
+		kind = "wss"
+	}
+	if s.WSListen != "" {
+		a = append(a, Listener{Kind: kind, Listen: s.WSListen, Path: s.WSPath, Paths: s.WSPaths, Certificate: s.Certificate, Key: s.Key})
+	}
+	return a
+}
 func (s ServerConfig) Validate() error {
 	if s.ID == "" || len(s.Users) == 0 {
 		return errors.New("hub ID and users required")
@@ -30,33 +61,45 @@ func (s ServerConfig) Validate() error {
 			return errors.New("each user requires a 32-byte secret")
 		}
 	}
-	if s.Listen == "" && s.WSListen == "" {
-		return errors.New("enable a TCP/TLS or WebSocket listener")
+	if len(s.Listeners) > 0 && (s.Listen != "" || s.WSListen != "" || s.Certificate != "" || s.Key != "" || s.WSPath != "" || len(s.WSPaths) > 0) {
+		return errors.New("choose listeners or legacy listener fields, not both")
 	}
-	for _, a := range []string{s.Listen, s.WSListen} {
-		if a != "" {
-			if !validTarget(a) {
-				return errors.New("invalid listener address")
+	listeners := s.listeners()
+	if len(listeners) == 0 {
+		return errors.New("enable at least one listener")
+	}
+	seen := map[string]bool{}
+	for _, l := range listeners {
+		if !validTarget(l.Listen) || seen[l.Listen] {
+			return errors.New("invalid or duplicate listener address")
+		}
+		seen[l.Listen] = true
+		switch l.Kind {
+		case "tcp", "ws":
+			if !loopback(l.Listen) {
+				return errors.New("unencrypted listeners must be loopback")
 			}
-			if s.Certificate == "" && !loopback(a) {
-				return errors.New("public listeners require TLS; CF and s-ui can reach loopback adapters")
+			if l.Certificate != "" || l.Key != "" {
+				return errors.New("certificate fields belong to TLS/WSS listeners")
+			}
+		case "tls", "wss":
+			if l.Certificate == "" || l.Key == "" {
+				return errors.New("TLS/WSS listener requires certificate and key")
+			}
+		default:
+			return errors.New("listener kind must be tcp, tls, ws or wss")
+		}
+		if l.Kind == "ws" || l.Kind == "wss" {
+			for _, path := range append([]string{l.Path}, l.Paths...) {
+				if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "?#") {
+					return errors.New("absolute WebSocket path required")
+				}
 			}
 		}
-	}
-	if s.Certificate != "" && s.Key == "" || s.Key != "" && s.Certificate == "" {
-		return errors.New("both certificate and key required")
-	}
-	if s.WSListen != "" && (!strings.HasPrefix(s.WSPath, "/") || strings.ContainsAny(s.WSPath, "?#")) {
-		return errors.New("absolute WebSocket path required")
 	}
 	for _, h := range s.ExitChain {
 		if (h.Kind != "socks5" && h.Kind != "http") || !validTarget(h.Address) {
 			return errors.New("invalid server exit bridge")
-		}
-	}
-	for _, p := range s.WSPaths {
-		if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "?#") {
-			return errors.New("invalid additional WS path")
 		}
 	}
 	return nil
@@ -75,7 +118,7 @@ func LoadServer(raw []byte) (ServerConfig, error) {
 }
 func (l Library) ServerTemplate() ServerConfig {
 	paths := []string{}
-	seen := map[string]bool{}
+	seen := map[string]bool{"/puk-bond": true}
 	for _, p := range l.Profiles {
 		u, e := url.Parse(p.URL)
 		if e == nil && (u.Scheme == "ws" || u.Scheme == "wss") {
@@ -89,5 +132,5 @@ func (l Library) ServerTemplate() ServerConfig {
 			}
 		}
 	}
-	return ServerConfig{ID: l.ServerID, Users: map[string]string{l.User: l.Secret}, Listen: "127.0.0.1:18085", WSListen: "127.0.0.1:18086", WSPath: "/puk-bond", WSPaths: paths, MaxSessions: 128}
+	return ServerConfig{ID: l.ServerID, Users: map[string]string{l.User: l.Secret}, Listeners: []Listener{{Kind: "tcp", Listen: "127.0.0.1:18085"}, {Kind: "ws", Listen: "127.0.0.1:18086", Path: "/puk-bond", Paths: paths}}, MaxSessions: 128}
 }

@@ -12,7 +12,9 @@
 - Native sing-box outbound constructor/profile selection tested independently of platform network monitoring.
 - Full sing-box selector + two SOCKS hop + WS/TLS integration test is provided. The local Work sandbox
   denies netlink monitoring, so that specific full-platform test skips on that restriction; CI runs it on
-  ordinary Linux runners. Do not equate the constructor test with this full-platform integration test.
+  ordinary Linux runners. GitHub Actions run 39019590325 passed the full-platform integration case.
+- Public-module downstream consumer build verified without inheriting the repository-local replace.
+- Existing adaptive engine cancellation regression repeated 100 times with race detection after its fix.
 - Native Linux core and tool build; generated example accepted by native `sing-box check`.
 
 Windows cross-build, Android APK build and normal-runner integration results are recorded by the linked

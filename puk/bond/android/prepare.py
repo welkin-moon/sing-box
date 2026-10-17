@@ -13,3 +13,11 @@ activity=ET.SubElement(app,'activity',{android+'name':'.compose.BondBuilderActiv
 target=a.client/'app/src/main/java/io/nekohasekai/sfa/compose/BondBuilderActivity.kt';shutil.copy2(root/'BondBuilderActivity.kt',target)
 assets=a.client/'app/src/main/assets';assets.mkdir(exist_ok=True);html=a.editor.read_text();extra='''<script>if(window.PUKHost){window.download=(name,data)=>PUKHost.save(name,JSON.stringify(data,null,2));const b=document.createElement('button');b.textContent='应用到本机代理';b.onclick=()=>{if(compiled)PUKHost.install(JSON.stringify(compiled.config))};document.querySelector('main').prepend(b);}</script>''';html=html.replace('</html>',extra+'</html>');(assets/'puk-bond.html').write_text(html)
 print('Prepared independent PUK Android host; no user configuration included.')
+
+# The pinned frontend predates two optional libbox platform callbacks. Android's
+# ordinary VpnService path does not use platform auto-redirect.
+wrapper=a.client/'app/src/main/java/io/nekohasekai/sfa/bg/PlatformInterfaceWrapper.kt'
+s=wrapper.read_text();marker='interface PlatformInterfaceWrapper : PlatformInterface {';assert marker in s
+if 'override fun usePlatformAutoRedirect()' not in s:
+ s=s.replace(marker,marker+'\n    override fun usePlatformAutoRedirect(): Boolean = false\n\n    override fun createAutoRedirect(\n        options: ByteArray,\n        handler: io.nekohasekai.libbox.AutoRedirectHandler,\n    ): io.nekohasekai.libbox.AutoRedirectSession =\n        throw UnsupportedOperationException("Platform auto-redirect is not used by this Android VPN host")\n',1)
+wrapper.write_text(s)
