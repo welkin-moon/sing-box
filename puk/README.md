@@ -6,6 +6,8 @@
 新增的 [上下行分离实验客户端](split/README.md) 通过 XHTTP 关联 CF 上传和 HY2 下载，
 提供 Windows x64 启动器及 Android arm64 Throne 完整配置；[验证记录](split/VERIFICATION.md) 列出已测项目与限制。
 
+新增 [原生双通道模块 PUK Bond](bond/README.md)：上传、下载各选一个配置档，支持已有代理链和自有汇合服务；XHTTP 实验保留为兼容实现。
+
 ## 已实现
 
 - 保留原订阅节点，为候选节点建立独立 HTTP CONNECT 测试入口。
@@ -18,7 +20,7 @@
 
 ## 构建与运行
 
-Go 1.22+，模块不需要第三方 Go 依赖。
+Go 1.23+，模块不需要第三方 Go 依赖。
 
 ```sh
 cd puk

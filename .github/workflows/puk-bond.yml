@@ -1,0 +1,91 @@
+name: PUK native bond
+on:
+  push:
+    branches: ['puk/split-client-*']
+    paths: ['puk/**', 'protocol/bond/**', 'option/bond.go', 'include/registry.go', 'go.mod', 'go.sum', '.github/workflows/puk-bond.yml']
+  pull_request:
+    paths: ['puk/**', 'protocol/bond/**', 'option/bond.go', 'include/registry.go', 'go.mod', 'go.sum', '.github/workflows/puk-bond.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: puk-bond-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: false
+      - run: go test -race -timeout 120s ./protocol/bond && go vet ./protocol/bond
+      - run: go test -race ./... && go vet ./...
+        working-directory: puk
+      - name: Build public native core and tools
+        run: |
+          mkdir -p dist
+          go build -trimpath -tags with_quic,with_utls -o dist/sing-box-linux-amd64 ./cmd/sing-box
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags with_quic,with_utls -o dist/sing-box.exe ./cmd/sing-box
+          cd puk
+          go build -trimpath -o ../dist/puk-bond-linux-amd64 ./cmd/puk-bond
+          GOOS=windows GOARCH=amd64 go build -trimpath -o ../dist/puk-bond.exe ./cmd/puk-bond
+          GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o ../dist/compiler.wasm ./cmd/puk-bond-web
+          python bond/build_offline.py --wasm ../dist/compiler.wasm --wasm-exec "$(go env GOROOT)/lib/wasm/wasm_exec.js" --out ../dist/PUK-Bond-Editor.html
+          cp bond/README.md bond/VERIFICATION.md bond/PROTOCOL.md bond/library.example.json bond/puk-bond.service ../dist/
+          cp ../LICENSE ../dist/LICENSE
+          cd ../dist
+          sha256sum * > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: puk-bond-native-public
+          path: dist/
+  android:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: puk-bond-native-public
+          path: native-tools
+      - name: Build modified Android core
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          make lib_install
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go run ./cmd/internal/build_libbox -target android -platform android/arm64
+          mkdir -p clients/android/app/libs
+          cp libbox.aar clients/android/app/libs/
+      - name: Add offline profile chooser and build standalone debug APK
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          python puk/bond/android/prepare.py --client clients/android --editor native-tools/PUK-Bond-Editor.html
+          cd clients/android
+          ./gradlew :app:assembleOtherDebug --stacktrace
+          cd ../..
+          mkdir -p dist-android
+          cp clients/android/app/build/outputs/apk/other/debug/*arm64-v8a*.apk dist-android/PUK-Bond-Android-arm64-debug.apk
+          sha256sum dist-android/*.apk > dist-android/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: puk-bond-android-arm64-debug
+          path: dist-android/

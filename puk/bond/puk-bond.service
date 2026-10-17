@@ -1,0 +1,16 @@
+[Unit]
+Description=PUK Bond session hub
+After=network-online.target
+Wants=network-online.target
+[Service]
+ExecStart=/usr/local/bin/puk-bond server --config /etc/puk-bond/server.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+[Install]
+WantedBy=multi-user.target

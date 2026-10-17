@@ -1,0 +1,15 @@
+{
+ "version":1,"name":"My modular bond","server_id":"my-jp-hub","user":"user","secret":"abababababababababababababababababababababababababababababababab",
+ "profiles":[
+  {"id":"cf","name":"CF to Japan","hub":"my-jp-hub","url":"wss://upload.example.org/puk-bond"},
+  {"id":"jp-direct","name":"Direct Japan TLS","hub":"my-jp-hub","url":"tls://jp.example.org:18443"},
+  {"id":"jp-hy2","name":"Japan HY2 to hub","hub":"my-jp-hub","url":"tcp://127.0.0.1:18085","outbound":"jp-hy2"},
+  {"id":"tw-jp","name":"Taiwan then Japan","hub":"my-jp-hub","url":"tcp://127.0.0.1:18085","outbound":"jp-via-tw"}
+ ],
+ "selection":{"upload":"tw-jp","download":"jp-hy2"},
+ "core":{"log":{"level":"warn"},"outbounds":[
+  {"type":"hysteria2","tag":"jp-hy2","server":"jp.example.org","server_port":443,"password":"REPLACE_LOCALLY","tls":{"enabled":true,"server_name":"jp.example.org"}},
+  {"type":"vless","tag":"tw","server":"tw.example.org","server_port":443,"uuid":"01234567-89ab-cdef-0123-456789abcdef","tls":{"enabled":true,"server_name":"tw.example.org"}},
+  {"type":"socks","tag":"jp-via-tw","server":"192.0.2.2","server_port":1080,"version":"5","detour":"tw"}
+ ]}
+}
