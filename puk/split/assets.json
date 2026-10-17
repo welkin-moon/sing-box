@@ -1,0 +1,14 @@
+{
+  "windows_gui": {
+    "url": "https://github.com/throneproj/Throne/releases/download/1.4.0-beta.2/Throne-1.4.0-beta.2-windows64.zip",
+    "sha256": "6b77ec889c0c460ccf8b8e4be21ec3e0a146529e9268151fa5b8d60a74a24ef8"
+  },
+  "windows_core": {
+    "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip",
+    "sha256": "d004c39288ce9ada487c6f398c7c545f7d749e44bdfdd59dbc9f865afba4e1ad"
+  },
+  "android_gui": {
+    "url": "https://github.com/throneproj/ThroneForAndroid/releases/download/v2.0.2/Throne-2.0.2-arm64-v8a.apk",
+    "sha256": "3371aae843434c25769aa128d53a8eb56c549dccb8c9a7f77fea9b0fb10939a8"
+  }
+}

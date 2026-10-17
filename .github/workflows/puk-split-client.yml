@@ -1,0 +1,33 @@
+name: PUK split client
+on:
+  push:
+    branches: ['puk/split-client-*']
+    paths: ['puk/**', '.github/workflows/puk-split-client.yml']
+  pull_request:
+    paths: ['puk/**', '.github/workflows/puk-split-client.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+      - run: go test -race ./... && go vet ./...
+        working-directory: puk
+      - name: Build credential-free launchers
+        working-directory: puk
+        run: |
+          mkdir -p dist
+          go build -trimpath -o dist/puk-split-linux-amd64 ./cmd/puk-split
+          GOOS=windows GOARCH=amd64 go build -trimpath -o dist/puk-split-windows-amd64.exe ./cmd/puk-split
+          cp split/README.md split/VERIFICATION.md split/profile.example.json split/assets.json split/package.py dist/
+          sha256sum dist/* > dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: puk-split-public-tools
+          path: puk/dist/

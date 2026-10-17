@@ -3,6 +3,9 @@
 基于 sing-box 的独立 Go 控制模块，保留上游核心与普通订阅兼容性。
 不依赖 Workers、DO、R2 或中心服务器进行实时择路。
 
+新增的 [上下行分离实验客户端](split/README.md) 通过 XHTTP 关联 CF 上传和 HY2 下载，
+提供 Windows x64 启动器及 Android arm64 Throne 完整配置；[验证记录](split/VERIFICATION.md) 列出已测项目与限制。
+
 ## 已实现
 
 - 保留原订阅节点，为候选节点建立独立 HTTP CONNECT 测试入口。
