@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/coder/websocket"
 	"io"
 	"net"
 	"net/http"
@@ -283,4 +284,73 @@ func TestCoreChainCycleRejected(t *testing.T) {
 	if e = l.Validate(); e == nil {
 		t.Fatal("cyclic chain accepted")
 	}
+}
+
+func TestWSKeepaliveWithoutApplicationReads(t *testing.T) {
+	done := make(chan struct{})
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, e := websocket.Accept(w, r, nil)
+		if e != nil {
+			return
+		}
+		stream := newWSStreamWith(c, 20*time.Millisecond, 200*time.Millisecond)
+		defer stream.Close()
+		defer close(done)
+		b := make([]byte, 1)
+		if _, e = io.ReadFull(stream, b); e == nil {
+			stream.Write(b)
+		}
+	}))
+	defer s.Close()
+	raw, _, e := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http"), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	c := newWSStreamWith(raw, 20*time.Millisecond, 200*time.Millisecond)
+	defer c.Close()
+	time.Sleep(120 * time.Millisecond)
+	c.SetDeadline(time.Now().Add(time.Second))
+	if _, e = c.Write([]byte{42}); e != nil {
+		t.Fatal(e)
+	}
+	b := make([]byte, 1)
+	if _, e = io.ReadFull(c, b); e != nil || b[0] != 42 {
+		t.Fatal("idle leg failed without app reader", e)
+	}
+	<-done
+}
+
+func TestWSBackpressureDoesNotInvalidateSession(t *testing.T) {
+	payload := bytes.Repeat([]byte{17}, 128*1024)
+	done := make(chan struct{})
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, e := websocket.Accept(w, r, nil)
+		if e != nil {
+			return
+		}
+		stream := newWSStreamWith(c, 10*time.Millisecond, 10*time.Millisecond)
+		defer stream.Close()
+		defer close(done)
+		for offset := 0; offset < len(payload); offset += 16384 {
+			if _, e = stream.Write(payload[offset : offset+16384]); e != nil {
+				return
+			}
+		}
+		io.ReadFull(stream, make([]byte, 1))
+	}))
+	defer s.Close()
+	raw, _, e := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http"), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	c := newWSStreamWith(raw, 10*time.Millisecond, 10*time.Millisecond)
+	defer c.Close()
+	time.Sleep(150 * time.Millisecond)
+	c.SetDeadline(time.Now().Add(time.Second))
+	b := make([]byte, len(payload))
+	if _, e = io.ReadFull(c, b); e != nil || !bytes.Equal(b, payload) {
+		t.Fatal("backpressure lost payload", e)
+	}
+	c.Write([]byte{1})
+	<-done
 }

@@ -358,6 +358,9 @@ func (e *Engine) Probe(ctx context.Context) error {
 		totalJobs += len(ref.policy.config.Probes)
 	}
 	if totalJobs == 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return firstPolicyError(e.policyOrder, controllerErrors)
 	}
 
@@ -445,6 +448,10 @@ func (e *Engine) Probe(ctx context.Context) error {
 				}
 			}
 		}
+	}
+	// Cancellation can race the final completion; do not mask it with a controller error.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return firstPolicyError(e.policyOrder, controllerErrors)
 }

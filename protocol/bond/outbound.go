@@ -72,12 +72,14 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 	return &Outbound{Adapter: outbound.NewAdapter(Type, tag, []string{N.NetworkTCP}, deps), client: B.Client{Server: o.ServerID, User: o.User, Secret: o.Secret, Upload: up, Download: down}}, nil
 }
+
 func (o *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	if N.NetworkName(network) != N.NetworkTCP {
 		return nil, errors.New("puk-bond native UDP is not implemented")
 	}
 	return o.client.Open(ctx, destination.String())
 }
+
 func (o *Outbound) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("puk-bond native UDP is not implemented")
 }

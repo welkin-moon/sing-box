@@ -45,7 +45,7 @@ func run() error {
 	defer stop()
 	switch mode {
 	case "ui":
-		return bond.ServeEditor(ctx)
+		return bond.ServeEditor(ctx, *bin)
 	case "init":
 		var l bond.Library
 		if e := json.Unmarshal(bond.ExampleLibrary, &l); e != nil {

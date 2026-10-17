@@ -18,13 +18,16 @@ flowchart LR
 
 ## 客户端选择
 
-运行 `puk-bond ui`，打开终端显示的本地链接；或者打开离线 `PUK-Bond-Editor.html`。
+运行 `puk-bond ui --core /path/to/sing-box`，打开终端显示的本地链接；或者打开离线 `PUK-Bond-Editor.html`。
 离线页内置相同的 Go/WASM 配置编译器，不依赖 CDN，不上传配置。
 
 1. 导入自己的模块库，或导入现有 **sing-box JSON**。
 2. 新增配置档：给它指定汇合服务地址、已有出站、可选 TLS 名称和证书指纹。
 3. 选择上传、下载配置档。代理链面板可设置节点的前置节点，循环引用会被拒绝。
-4. 保存模块库，导出客户端配置及汇合服务配置。两种文件含凭据，均留在本地。
+4. Windows 本地界面可点“连接 / 停止”；本地代理入口为 `127.0.0.1:19080`。
+5. 保存模块库，按需导出客户端配置及汇合服务配置。文件含凭据，均留在本地。
+
+离线 HTML 只负责选择和导出；带 `--core` 启动的本地界面可控制自己创建的内核。切换配置档后先停止再连接。
 
 常见配置档：
 
@@ -52,7 +55,7 @@ go build -tags with_quic,with_utls -o sing-box ./cmd/sing-box
 cd puk
 go build -o puk-bond ./cmd/puk-bond
 ./puk-bond init --out-dir /private/new-profile
-./puk-bond ui
+./puk-bond ui --core /absolute/path/sing-box
 ./puk-bond run --config /private/library.private.json --core /absolute/path/sing-box
 ```
 

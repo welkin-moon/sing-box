@@ -1,7 +1,7 @@
 name: PUK native bond
 on:
   push:
-    branches: ['puk/split-client-*']
+    branches: ['testing']
     paths: ['puk/**', 'protocol/bond/**', 'option/bond.go', 'include/registry.go', 'go.mod', 'go.sum', '.github/workflows/puk-bond.yml']
   pull_request:
     paths: ['puk/**', 'protocol/bond/**', 'option/bond.go', 'include/registry.go', 'go.mod', 'go.sum', '.github/workflows/puk-bond.yml']
@@ -19,8 +19,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.8'
-          cache: false
-      - run: go test -race -timeout 120s ./protocol/bond && go vet ./protocol/bond
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            puk/go.sum
+      - run: go test -v -race -timeout 120s ./protocol/bond && go vet ./protocol/bond
       - run: go test -race ./... && go vet ./...
         working-directory: puk
       - name: Build public native core and tools
@@ -51,7 +54,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.8'
-          cache: false
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            puk/go.sum
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,6 +75,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
+          git tag v1.15.0-alpha.0-puk-bond-local
           make lib_install
           export PATH="$PATH:$(go env GOPATH)/bin"
           go run ./cmd/internal/build_libbox -target android -platform android/arm64

@@ -30,8 +30,7 @@ import (
 )
 
 func TestNativeOutboundWithSelectorAndChain(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	secret := strings.Repeat("ab", 32)
 	h := &B.Hub{ID: "jp-hub", Users: map[string]string{"u": secret}}
 	defer h.Close()
@@ -55,7 +54,7 @@ func TestNativeOutboundWithSelectorAndChain(t *testing.T) {
 		}
 	}()
 	var bridges []net.Listener
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		l, e := net.Listen("tcp", "127.0.0.1:0")
 		if e != nil {
 			t.Fatal(e)
@@ -127,9 +126,11 @@ func (p *existingProfile) DialContext(ctx context.Context, n string, a M.Socksad
 	go p.h.ServeConn(s)
 	return c, nil
 }
+
 func (p *existingProfile) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("unused")
 }
+
 func TestNativeProfileSelectionWithoutPlatform(t *testing.T) {
 	secret := strings.Repeat("bc", 32)
 	h := &B.Hub{ID: "jp", Users: map[string]string{"u": secret}}
@@ -138,7 +139,7 @@ func TestNativeProfileSelectionWithoutPlatform(t *testing.T) {
 	for _, tag := range []string{"tw-jp", "jp-direct"} {
 		manager.items[tag] = &existingProfile{Adapter: AO.NewAdapter("test-profile", tag, []string{"tcp"}, nil), h: h}
 	}
-	ctx := service.ContextWith[adapter.OutboundManager](context.Background(), manager)
+	ctx := service.ContextWith[adapter.OutboundManager](t.Context(), manager)
 	o, e := PB.NewOutbound(ctx, nil, nil, "bond", option.BondOutboundOptions{ServerID: "jp", User: "u", Secret: secret, Upload: option.BondPathOptions{URL: "tcp://127.0.0.1:18085", Outbound: "tw-jp"}, Download: option.BondPathOptions{URL: "tcp://127.0.0.1:18085", Outbound: "jp-direct"}})
 	if e != nil {
 		t.Fatal(e)

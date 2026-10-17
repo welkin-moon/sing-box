@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -252,30 +253,73 @@ func (p Path) Dial(base DialFunc) func(context.Context) (net.Conn, error) {
 	}
 }
 
+type wsChunk struct {
+	data []byte
+	err  error
+}
 type wsStream struct {
 	net.Conn
-	c      *websocket.Conn
-	cancel context.CancelFunc
-	once   sync.Once
+	c       *websocket.Conn
+	cancel  context.CancelFunc
+	once    sync.Once
+	chunks  chan wsChunk
+	ctx     context.Context
+	rmu     sync.Mutex
+	pending []byte
+	readErr error
+	busy    atomic.Bool
+	writing atomic.Int32
+	last    atomic.Int64
 }
 
 func newWSStream(c *websocket.Conn) net.Conn {
+	return newWSStreamWith(c, 25*time.Second, 8*time.Second)
+}
+func newWSStreamWith(c *websocket.Conn, interval, timeout time.Duration) net.Conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	nc := websocket.NetConn(ctx, c, websocket.MessageBinary)
 	c.SetReadLimit(2 * maxFrame)
-	w := &wsStream{Conn: nc, c: c, cancel: cancel}
+	w := &wsStream{Conn: nc, c: c, cancel: cancel, ctx: ctx, chunks: make(chan wsChunk, 1)}
+	w.last.Store(time.Now().UnixNano())
+	// Always process WS control traffic, even while the application only writes.
 	go func() {
-		t := time.NewTicker(25 * time.Second)
+		defer close(w.chunks)
+		for {
+			b := make([]byte, 16384)
+			n, e := nc.Read(b)
+			if n > 0 {
+				w.last.Store(time.Now().UnixNano())
+			}
+			if n > 0 || e != nil {
+				w.busy.Store(true)
+				select {
+				case w.chunks <- wsChunk{b[:n], e}:
+					w.busy.Store(false)
+				case <-ctx.Done():
+					return
+				}
+			}
+			if e != nil {
+				return
+			}
+		}
+	}()
+	go func() {
+		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				pctx, stop := context.WithTimeout(ctx, 8*time.Second)
+				// Backpressure is activity, not a failed keepalive. Do not time out a blocked writer/reader.
+				if w.busy.Load() || w.writing.Load() > 0 || time.Since(time.Unix(0, w.last.Load())) < interval {
+					continue
+				}
+				pctx, stop := context.WithTimeout(ctx, timeout)
 				e := c.Ping(pctx)
 				stop()
-				if e != nil {
+				if e != nil && !errors.Is(e, context.DeadlineExceeded) {
 					w.Close()
 					return
 				}
@@ -284,7 +328,37 @@ func newWSStream(c *websocket.Conn) net.Conn {
 	}()
 	return w
 }
-func (c *wsStream) Close() error { c.once.Do(func() { c.cancel(); c.c.CloseNow() }); return nil }
+func (w *wsStream) Read(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+	w.rmu.Lock()
+	defer w.rmu.Unlock()
+	for len(w.pending) == 0 {
+		if w.readErr != nil {
+			return 0, w.readErr
+		}
+		chunk, ok := <-w.chunks
+		if !ok {
+			return 0, io.EOF
+		}
+		w.pending = chunk.data
+		w.readErr = chunk.err
+	}
+	n := copy(b, w.pending)
+	w.pending = w.pending[n:]
+	return n, nil
+}
+func (w *wsStream) Write(b []byte) (int, error) {
+	w.writing.Add(1)
+	defer w.writing.Add(-1)
+	n, e := w.Conn.Write(b)
+	if n > 0 {
+		w.last.Store(time.Now().UnixNano())
+	}
+	return n, e
+}
+func (w *wsStream) Close() error { w.once.Do(func() { w.cancel(); w.c.CloseNow() }); return nil }
 
 // WebSocketHandler only adapts the carrier; it shares the same Hub as TCP.
 func (h *Hub) WebSocketHandler(path string) http.Handler { return h.WebSocketHandlers([]string{path}) }
