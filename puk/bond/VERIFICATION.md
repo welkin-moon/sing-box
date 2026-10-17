@@ -22,3 +22,16 @@ commit's GitHub Actions. A successful APK build does not establish phone VPN or 
 Android device connectivity, Windows 10 physical hardware, WAN throughput, stability over a changing network,
 UDP datagrams and transparent resumption are not verified here. Earlier XHTTP/TW measurements apply to the
 separate compatibility implementation and are not results for this new native protocol.
+
+Additional native verification (2026-10-17):
+
+- Android configuration now has a TUN ingress and, when no DNS is imported, TCP DoH through Bond
+  with an independent local bootstrap resolver. SDK race tests and native option decoding pass;
+  physical Android VPN behavior remains unverified.
+- A real Windows SDK SOCKS bridge used a Cloudflare WebSocket upload carrier and a separate
+  Hysteria2 download carrier to the same hub. Both directions transferred 8 MiB with matching SHA-256;
+  eight parallel HTTPS requests returned 200; breaking either carrier failed the connection.
+  This verifies the session/carrier combination, not Android or the entire desktop GUI workflow.
+- The successful download took 11.45 seconds. An earlier attempt timed out at 30 seconds with a partial
+  body; a later test used a 60-second ceiling. Changing network conditions mean these are not controlled
+  throughput comparisons or evidence of a causal BBR speedup.
