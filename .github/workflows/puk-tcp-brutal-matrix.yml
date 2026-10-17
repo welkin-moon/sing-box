@@ -1,0 +1,33 @@
+name: PUK TCP Brutal Matrix Checks
+
+on:
+  push:
+    paths:
+      - "puk/deploy/tcp_brutal_matrix.py"
+      - "puk/deploy/test_tcp_brutal_matrix.py"
+      - "puk/deploy/render_tcp_brutal_canary.py"
+      - "puk/deploy/test_render_tcp_brutal_canary.py"
+      - "puk/deploy/TCP_BRUTAL_MATRIX.md"
+      - ".github/workflows/puk-tcp-brutal-matrix.yml"
+  pull_request:
+    paths:
+      - "puk/deploy/tcp_brutal_matrix.py"
+      - "puk/deploy/test_tcp_brutal_matrix.py"
+      - "puk/deploy/TCP_BRUTAL_MATRIX.md"
+      - ".github/workflows/puk-tcp-brutal-matrix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline matrix verification tests
+        run: python3 -m unittest discover -s puk/deploy -p 'test_tcp_brutal_matrix.py' -v
+      - name: Validate dedicated TCP Brutal canary output
+        run: python3 -m unittest discover -s puk/deploy -p 'test_render_tcp_brutal_canary.py' -v
+      - name: Compile planner
+        run: python3 -m py_compile puk/deploy/tcp_brutal_matrix.py puk/deploy/render_tcp_brutal_canary.py
