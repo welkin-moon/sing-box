@@ -154,5 +154,21 @@ if ! systemctl is-active --quiet "$SERVICE"; then
   systemctl daemon-reload
   fail 'Canary exited after start; rolled back isolated service'
 fi
+# ACME renewal must reload the active TLS consumer after a separate hook
+# has copied the renewed certificate into /etc/sing-box/tls.
+# Use a distinct additive hook; do not overwrite existing renewal scripts.
+if [[ -d /etc/letsencrypt/renewal-hooks/deploy ]]; then
+  RENEW_HOOK=/etc/letsencrypt/renewal-hooks/deploy/88-puk-brutal-canary-reload.sh
+  if [[ ! -e "$RENEW_HOOK" ]]; then
+    cat > "$RENEW_HOOK" <<'HOOK'
+#!/bin/sh
+# Re-read TLS after the origin cert synchronization deploy hook finishes.
+if systemctl is-active --quiet puk-tcp-brutal-canary.service; then
+    systemctl try-restart puk-tcp-brutal-canary.service
+fi
+HOOK
+    chmod 0755 "$RENEW_HOOK"
+  fi
+fi
 msg 'CANARY SERVICE ACTIVE; NOT ADDED TO PUBLIC SUBSCRIPTION'
 msg "Dedicated TCP listener on port $PORT; perform external application checks before region/family publication"
