@@ -79,9 +79,10 @@ if inbound['listen'] == '0.0.0.0':
 tls = inbound.get('tls', {})
 if tls.get('enabled') is not True or tls.get('insecure') is True:
     raise SystemExit('Cannot enable an insecure or missing TLS listener')
-for path in ('certificate_path', 'key_path'):
-    if tls.get(path) not in ('/etc/sing-box/tls/fullchain.pem', '/etc/sing-box/tls/privkey.pem'):
-        raise SystemExit('Unexpected cert path')
+if tls.get('certificate_path') != '/etc/sing-box/tls/fullchain.pem':
+    raise SystemExit('Wrong certificate chain location')
+if tls.get('key_path') != '/etc/sing-box/tls/privkey.pem':
+    raise SystemExit('Wrong private key location')
 mux = inbound.get('multiplex', {})
 brutal = mux.get('brutal', {})
 if mux.get('enabled') is not True or brutal.get('enabled') is not True:
