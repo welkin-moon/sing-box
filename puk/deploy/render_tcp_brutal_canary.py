@@ -40,6 +40,11 @@ def render(identity: dict, region: str, sni: str, hostnames: dict[str, str],
         if not re.fullmatch(r'ss[1-9][0-9]*', name):
             raise ValueError('Unexpected subscriber name')
         users.append({'name': name, 'uuid': str(uuid.UUID(user_uuid))})
+    if not isinstance(hostnames, dict) or not hostnames:
+        raise ValueError('At least one verified address-family hostname is required')
+    # An IPv4-only VPS must not depend on an IPv6 wildcard listener.
+    # Dual-stack servers require OS net.ipv6.bindv6only=0 for IPv4-mapped traffic.
+    listen_ip = '::' if ('v6' in hostnames or 'dual' in hostnames) else '0.0.0.0'
     # Brutal settings are on Multiplex, *not* an XTLS-Vision flow.
     mux = {
         'enabled': True, 'padding': True,
@@ -47,7 +52,7 @@ def render(identity: dict, region: str, sni: str, hostnames: dict[str, str],
     }
     inbound = {
         'type': 'vless', 'tag': f'{region.lower()}-tcp-brutal-canary',
-        'listen': '::', 'listen_port': port, 'users': users,
+        'listen': listen_ip, 'listen_port': port, 'users': users,
         'tls': {'enabled': True, 'server_name': sni,
                 'certificate_path': str(chain), 'key_path': str(private)},
         'multiplex': mux,
