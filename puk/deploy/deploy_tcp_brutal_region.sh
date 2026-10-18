@@ -48,17 +48,16 @@ if systemctl cat puk-tcp-brutal-canary.service >/dev/null 2>&1; then
 fi
 
 bash "$BASE/install_tcp_brutal_v2.sh" --check
+[[ -d "$CERT" ]] || { echo 'Certificate staging directory missing' >&2; exit 3; }
+[[ -r "$CERT/fullchain.pem" && -r "$CERT/privkey.pem" ]] ||
+  { echo 'TLS certificate/key not staged' >&2; exit 3; }
 if [[ "$MODE" == check ]]; then
-  echo 'Read-only preflight complete; no files or services modified.'
+  echo 'Read-only preflight complete: manifests, certificates, module environment inspected.'
   exit 0
 fi
 if [[ "$MODE" == deploy ]]; then
   bash "$BASE/install_tcp_brutal_v2.sh" --install
 fi
-
-[[ -d "$CERT" ]] || { echo 'Certificate staging directory missing' >&2; exit 3; }
-[[ -r "$CERT/fullchain.pem" && -r "$CERT/privkey.pem" ]] ||
-  { echo 'TLS certificate/key not staged' >&2; exit 3; }
 
 # Run render under root and never print credential values.
 install -d -o root -g sing-box -m 0750 "$STATE"
