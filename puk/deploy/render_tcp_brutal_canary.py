@@ -55,20 +55,30 @@ def render(identity: dict, region: str, sni: str, hostnames: dict[str, str],
     server = {'log': {'level': 'warn'}, 'inbounds': [inbound],
               'outbounds': [{'type': 'direct', 'tag': 'direct'}],
               'route': {'final': 'direct', 'auto_detect_interface': True}}
-    client_outbounds = {}
-    for family, host in hostnames.items():
-        if family not in ('v4', 'v6', 'dual') or not isinstance(host, str):
-            raise ValueError('Only v4/v6/dual family hostnames accepted')
-        if not re.fullmatch(r'[A-Za-z0-9.-]+', host):
-            raise ValueError('Invalid family hostname')
-        client_outbounds[family] = {
-            'type': 'vless', 'tag': f'CANARY-{region.upper()}-TCPBrutal-{family}',
-            'server': host, 'server_port': port, 'uuid': users[0]['uuid'],
-            'tls': {'enabled': True, 'server_name': sni},
-            'multiplex': {**mux, 'protocol': 'smux'},
-        }
-    return {'server_candidate': server, 'client_canary_outbounds': client_outbounds,
-            'warning': 'Candiate only: module/socket and external application tests REQUIRED before publication'}
+    # Each subscriber receives only their own UUID in their own private bundle.
+    # A base64 VLESS URI cannot represent the TCP Brutal multiplex settings
+    # portably; users must import the JSON outbound into a compatible sing-box.
+    client_outbounds_by_user = {}
+    for user in users:
+        individual = {}
+        for family, host in hostnames.items():
+            if family not in ('v4', 'v6', 'dual') or not isinstance(host, str):
+                raise ValueError('Only v4/v6/dual family hostnames accepted')
+            if not re.fullmatch(r'[A-Za-z0-9.-]+', host):
+                raise ValueError('Invalid family hostname')
+            individual[family] = {
+                'type': 'vless', 'tag': f'CANARY-{region.upper()}-TCPBrutal-{family}',
+                'server': host, 'server_port': port, 'uuid': user['uuid'],
+                'tls': {'enabled': True, 'server_name': sni},
+                'multiplex': {**mux, 'protocol': 'smux'},
+            }
+        client_outbounds_by_user[user['name']] = individual
+    # Retain the original single-user preview key for older installer tooling.
+    preview = client_outbounds_by_user[users[0]['name']]
+    return {'server_candidate': server,
+            'client_canary_outbounds': preview,
+            'client_canary_outbounds_by_user': client_outbounds_by_user,
+            'warning': 'Candidate only; kernel module and endpoint tests required before public subscription publication'}
 
 
 def main() -> None:
