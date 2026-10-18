@@ -82,6 +82,16 @@ fi
 modprobe brutal || die 'Could not load brutal kernel module'
 make -C "$SOURCE/tools" -s >>"$LOGFILE" 2>&1
 install -m 0755 "$SOURCE/tools/brutalctl" /usr/local/bin/brutalctl
+# Systemd loads the module after reboot; no global CC or broad route rules.
+MODULES_FILE=/etc/modules-load.d/95-puk-brutal.conf
+if [[ -e "$MODULES_FILE" ]]; then
+  grep -qx brutal "$MODULES_FILE" ||
+    die 'Unexpected existing modules-load entry; inspect before replacing'
+else
+  install -d -m 0755 /etc/modules-load.d
+  printf 'brutal\n' > "$MODULES_FILE"
+  chmod 0644 "$MODULES_FILE"
+fi
 grep -qw brutal /proc/sys/net/ipv4/tcp_available_congestion_control ||
   die 'brutal is not an available TCP congestion controller after modprobe'
 [[ $(sysctl -n net.ipv4.tcp_congestion_control) == "$CURRENT_CC" ]] ||
