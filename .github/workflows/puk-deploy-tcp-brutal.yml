@@ -1,0 +1,89 @@
+name: PUK TCP Brutal controlled rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: VPS region with its own preconfigured GitHub Environment
+        type: choice
+        required: true
+        options: [jpx, uk, de, us, jp, jps, tw]
+      mode:
+        description: Stage private configs or activate the isolated canary
+        type: choice
+        required: true
+        default: stage
+        options: [stage, deploy]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: puk-tcp-brutal-${{ inputs.region }}
+  cancel-in-progress: false
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    environment: puk-${{ inputs.region }}
+    timeout-minutes: 45
+    env:
+      REGION: ${{ inputs.region }}
+      DEPLOY_MODE: ${{ inputs.mode }}
+      SSH_HOST: ${{ vars.PUK_SSH_HOST }}
+      SSH_PORT: ${{ vars.PUK_SSH_PORT }}
+      SNI: ${{ vars.PUK_TLS_SNI }}
+      IDENTITY_FILE: ${{ vars.PUK_IDENTITY_FILE }}
+      FAMILY_FILE: ${{ vars.PUK_FAMILY_FILE }}
+      UP_MBPS: ${{ vars.PUK_UP_MBPS }}
+      DOWN_MBPS: ${{ vars.PUK_DOWN_MBPS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate environment and invoke remote deploy
+        shell: bash
+        env:
+          PUK_DEPLOY_KEY: ${{ secrets.PUK_SSH_PRIVATE_KEY }}
+          PUK_KNOWN_HOSTS: ${{ secrets.PUK_SSH_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$PUK_DEPLOY_KEY" || -z "$PUK_KNOWN_HOSTS" ]]; then
+            echo "::error::Missing region-scoped key or verified known_hosts"
+            exit 2
+          fi
+          for field in SSH_HOST SNI IDENTITY_FILE FAMILY_FILE SSH_PORT UP_MBPS DOWN_MBPS; do
+            if [[ -z "$(printenv "$field")" ]]; then
+              echo "::error::Missing environment variable $field"
+              exit 2
+            fi
+          done
+          [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || exit 2
+          [[ "$SNI" =~ ^[A-Za-z0-9.-]+$ ]] || exit 2
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] || exit 2
+          [[ "$UP_MBPS" =~ ^[0-9]{1,5}$ ]] || exit 2
+          [[ "$DOWN_MBPS" =~ ^[0-9]{1,5}$ ]] || exit 2
+          [[ "$IDENTITY_FILE" =~ ^/etc/[A-Za-z0-9/_.-]+$ ]] || exit 2
+          [[ "$FAMILY_FILE" =~ ^/etc/[A-Za-z0-9/_.-]+$ ]] || exit 2
+          umask 077
+          mkdir -p "$RUNNER_TEMP/puk-ssh"
+          KEY_FILE="$RUNNER_TEMP/puk-ssh/key"
+          KH_FILE="$RUNNER_TEMP/puk-ssh/known_hosts"
+          trap 'rm -f "$KEY_FILE" "$KH_FILE"' EXIT
+          printf '%s\n' "$PUK_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$PUK_KNOWN_HOSTS" > "$KH_FILE"
+          chmod 0600 "$KEY_FILE" "$KH_FILE"
+          REMOTE="root@$SSH_HOST"
+          RELEASE_DIR="/opt/puk-deploy/releases/$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          echo "Deploying pinned scripts to region $REGION"
+          ssh -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH_FILE" -o ConnectTimeout=12 -p "$SSH_PORT" "$REMOTE" \
+            "mkdir -p '$RELEASE_DIR' && chmod 0700 '$RELEASE_DIR'"
+          scp -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH_FILE" -P "$SSH_PORT" \
+            puk/deploy/*.sh puk/deploy/*.py "$REMOTE:$RELEASE_DIR/"
+          printf -v remote_command '%q ' \
+            bash "$RELEASE_DIR/deploy_tcp_brutal_region.sh" \
+            "--$DEPLOY_MODE" --region "$REGION" --tls-sni "$SNI" \
+            --identity-file "$IDENTITY_FILE" --hostnames-file "$FAMILY_FILE" \
+            --up-mbps "$UP_MBPS" --down-mbps "$DOWN_MBPS"
+          ssh -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH_FILE" -o ConnectTimeout=12 -p "$SSH_PORT" "$REMOTE" "$remote_command"
+          echo "Remote $DEPLOY_MODE completed for $REGION."
+          echo "Cloudflare production subscription was not modified by this workflow."
