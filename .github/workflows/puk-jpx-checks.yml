@@ -1,0 +1,29 @@
+name: JPX renderer and dual-stack checks
+on:
+  push:
+    paths:
+      - 'puk/deploy/render_jpx.py'
+      - 'puk/deploy/test_render_jpx.py'
+      - 'puk/deploy/enable_jpx_nginx_ipv6.py'
+      - 'puk/deploy/test_enable_jpx_nginx_ipv6.py'
+      - '.github/workflows/puk-jpx-checks.yml'
+  pull_request:
+    paths:
+      - 'puk/deploy/render_jpx.py'
+      - 'puk/deploy/test_render_jpx.py'
+      - 'puk/deploy/enable_jpx_nginx_ipv6.py'
+      - 'puk/deploy/test_enable_jpx_nginx_ipv6.py'
+      - '.github/workflows/puk-jpx-checks.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JPX renderer unit tests
+        run: python3 -m unittest discover -s puk/deploy -p 'test_render_jpx.py' -v
+      - name: JPX Nginx IPv6 patch tests
+        run: python3 -m unittest discover -s puk/deploy -p 'test_enable_jpx_nginx_ipv6.py' -v
+      - name: Python compile checks
+        run: python3 -m py_compile puk/deploy/render_jpx.py puk/deploy/enable_jpx_nginx_ipv6.py
