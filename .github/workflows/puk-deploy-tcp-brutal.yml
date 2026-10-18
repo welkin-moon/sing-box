@@ -26,7 +26,7 @@ jobs:
   rollout:
     runs-on: ubuntu-latest
     environment: puk-${{ inputs.region }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       REGION: ${{ inputs.region }}
       DEPLOY_MODE: ${{ inputs.mode }}
@@ -72,13 +72,15 @@ jobs:
           printf '%s\n' "$PUK_KNOWN_HOSTS" > "$KH_FILE"
           chmod 0600 "$KEY_FILE" "$KH_FILE"
           REMOTE="root@$SSH_HOST"
+          RELEASE_DIR="/opt/puk-deploy/releases/$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
           echo "Deploying pinned scripts to region $REGION"
           ssh -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH_FILE" -o ConnectTimeout=12 -p "$SSH_PORT" "$REMOTE" \
-            'mkdir -p /opt/puk-deploy/tcp-brutal && chmod 0700 /opt/puk-deploy/tcp-brutal'
+            "mkdir -p '$RELEASE_DIR' && chmod 0700 '$RELEASE_DIR'"
           scp -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH_FILE" -P "$SSH_PORT" \
-            puk/deploy/*.sh puk/deploy/*.py "$REMOTE:/opt/puk-deploy/tcp-brutal/"
+            puk/deploy/*.sh puk/deploy/*.py "$REMOTE:$RELEASE_DIR/"
           printf -v remote_command '%q ' \
-            bash /opt/puk-deploy/tcp-brutal/deploy_tcp_brutal_region.sh \
+            bash "$RELEASE_DIR/deploy_tcp_brutal_region.sh" \
             "--$DEPLOY_MODE" --region "$REGION" --tls-sni "$SNI" \
             --identity-file "$IDENTITY_FILE" --hostnames-file "$FAMILY_FILE" \
             --up-mbps "$UP_MBPS" --down-mbps "$DOWN_MBPS"
