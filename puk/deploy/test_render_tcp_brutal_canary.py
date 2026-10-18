@@ -66,6 +66,17 @@ class CanaryConfigTests(unittest.TestCase):
         self.assertEqual(result['client_canary_outbounds']['v4'],
                          sources['ss1']['v4'])
 
+    def test_ipv4_only_region_does_not_require_ipv6_socket(self):
+        self.names = {'v4': 'us4.example.org'}
+        config = self.render()
+        server = config['server_candidate']['inbounds'][0]
+        self.assertEqual(server['listen'], '0.0.0.0')
+        self.assertEqual(set(config['client_canary_outbounds']), {'v4'})
+
+    def test_dual_stack_region_binds_ipv6_mapped_socket(self):
+        server = self.render()['server_candidate']['inbounds'][0]
+        self.assertEqual(server['listen'], '::')
+
     def test_rate_must_be_measured_valid_integer(self):
         for invalid in (0, -1, True, '40', 100001):
             with self.subTest(invalid=invalid):
