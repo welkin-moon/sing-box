@@ -69,8 +69,13 @@ if not isinstance(inbounds, list) or len(inbounds) != 1:
 inbound = inbounds[0]
 if inbound.get('type') != 'vless' or inbound.get('listen_port') != port:
     raise SystemExit('Unexpected protocol or port; refusing installation')
-if inbound.get('listen') != '::':
-    raise SystemExit('Expected explicit dual-family wildcard bind')
+if inbound.get('listen') not in ('::', '0.0.0.0'):
+    raise SystemExit('Expected an explicit IPv4 or IPv6 wildcard bind')
+by_user = data.get('client_canary_outbounds_by_user', {})
+if inbound['listen'] == '0.0.0.0':
+    for families in by_user.values():
+        if 'v6' in families or 'dual' in families:
+            raise SystemExit('IPv4-only listener conflicts with v6/dual exports')
 tls = inbound.get('tls', {})
 if tls.get('enabled') is not True or tls.get('insecure') is True:
     raise SystemExit('Cannot enable an insecure or missing TLS listener')
@@ -95,6 +100,12 @@ dest.write_text(json.dumps(server, indent=2) + '\n', encoding='utf-8')
 os.chmod(dest, 0o600)
 print('Private candidate parsed: 1 inbound; TLS; mux Brutal; Direct; no flow')
 PY
+# A true v4/v6 dual listener requires mapped IPv4 support. Abort rather than
+# claim a dual-family edge that only accepts IPv6.
+if grep -q '"dual"' "$BUNDLE" && grep -q '"listen": "::"' "$CANDIDATE"; then
+  [[ $(sysctl -n net.ipv6.bindv6only 2>/dev/null) == 0 ]] ||
+    fail 'IPv6 wildcard is v6only: dual family cannot be advertised'
+fi
 sing-box check -c "$CANDIDATE" >/dev/null ||
   fail 'sing-box syntax or Brutal support check failed'
 msg "Config check passed; active CC=$(sysctl -n net.ipv4.tcp_congestion_control)"
