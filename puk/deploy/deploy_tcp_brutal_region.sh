@@ -37,7 +37,7 @@ done
   usage
 [[ $(id -u) == 0 ]] || { echo 'Root required' >&2; exit 2; }
 [[ -f "$IDENTITIES" && -f "$HOSTNAMES" ]] || { echo 'Missing private on-host manifests' >&2; exit 2; }
-[[ -f "$BASE/install_tcp_brutal_v2.sh" && -f "$BASE/activate_tcp_brutal_canary.sh" ]] ||
+[[ -f "$BASE/install_tcp_brutal_v2.sh" && -f "$BASE/activate_tcp_brutal_canary.sh" && -f "$BASE/export_tcp_brutal_subscribers.py" ]] ||
   { echo 'Incomplete deploy bundle' >&2; exit 2; }
 
 # Refuse to overwrite an existing service. Roll back with the explicit command
@@ -68,7 +68,9 @@ python3 "$BASE/render_tcp_brutal_canary.py" \
   --port "$PORT" --up-mbps "$UP" --down-mbps "$DOWN" \
   --output "$BUNDLE"
 chmod 0600 "$BUNDLE"
-echo 'Rendered private per-user canary; do not upload bundle to GitHub.'
+python3 "$BASE/export_tcp_brutal_subscribers.py" \
+  --bundle "$BUNDLE" --out-dir "$STATE/subscribers"
+echo 'Rendered root-only per-user candidate JSON; do not upload these files to GitHub.'
 if [[ "$MODE" == stage ]]; then
   if grep -qw brutal /proc/sys/net/ipv4/tcp_available_congestion_control; then
     bash "$BASE/activate_tcp_brutal_canary.sh" --check "$BUNDLE"
