@@ -44,6 +44,8 @@ def load_or_make_keypair(state: Path, binary: str) -> tuple[str, str]:
     public = re.search(r'PublicKey:\s*([A-Za-z0-9_-]{40,60})', data)
     if not private or not public:
         raise ValueError('Invalid Reality keypair format; refusing to overwrite')
+    if len(base64.urlsafe_b64decode(public.group(1) + '=' * (-len(public.group(1)) % 4))) != 32:
+        raise ValueError('Reality public key must decode to 32 bytes')
     return private.group(1), public.group(1)
 
 
