@@ -51,6 +51,12 @@ bash "$BASE/install_tcp_brutal_v2.sh" --check
 [[ -d "$CERT" ]] || { echo 'Certificate staging directory missing' >&2; exit 3; }
 [[ -r "$CERT/fullchain.pem" && -r "$CERT/privkey.pem" ]] ||
   { echo 'TLS certificate/key not staged' >&2; exit 3; }
+command -v openssl >/dev/null 2>&1 ||
+  { echo 'OpenSSL required to validate the leaf certificate before rollout' >&2; exit 3; }
+openssl x509 -in "$CERT/fullchain.pem" -noout -checkhost "$SNI" >/dev/null ||
+  { echo 'Certificate SAN does not match the requested TLS SNI' >&2; exit 3; }
+openssl x509 -in "$CERT/fullchain.pem" -noout -checkend 86400 >/dev/null ||
+  { echo 'Certificate expires in less than 24 hours' >&2; exit 3; }
 if [[ "$MODE" == check ]]; then
   echo 'Read-only preflight complete: manifests, certificates, module environment inspected.'
   exit 0
