@@ -18,12 +18,15 @@ import uuid
 from urllib.parse import quote, urlencode
 
 
-def save(path: Path, data: str, mode: int = 0o600) -> None:
+def save(path: Path, data: str, mode: int = 0o600, group: str | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pending = path.with_name(path.name + '.pending')
     with pending.open('w', encoding='utf-8') as out:
         out.write(data)
     pending.chmod(mode)
+    if group and hasattr(os, 'geteuid') and os.geteuid() == 0:
+        import grp
+        os.chown(pending, -1, grp.getgrnam(group).gr_gid)
     pending.replace(path)
 
 
@@ -31,8 +34,7 @@ def load_or_make_keypair(state: Path, binary: str) -> tuple[str, str]:
     keypath = state / 'jpx-reality-keypair.txt'
     existing = Path('/etc/sing-box/jpx-keypair.txt')
     if not keypath.exists() and existing.is_file():
-        keypath.write_text(existing.read_text(encoding='utf-8'), encoding='utf-8')
-        keypath.chmod(0o600)
+        save(keypath, existing.read_text(encoding='utf-8'), 0o600)
     if not keypath.exists():
         pair = subprocess.run([binary, 'generate', 'reality-keypair'], check=True,
                               text=True, capture_output=True)
@@ -47,8 +49,14 @@ def load_or_make_keypair(state: Path, binary: str) -> tuple[str, str]:
 
 def render(state: Path, cert_dir: Path, config: Path, subs: Path,
            fqdn: str, reality_name: str, binary: str, users: int) -> dict:
+    for p in (state, config, subs):
+        if p.is_symlink():
+            raise ValueError(f'Symlinked deployment path is not permitted: {p}')
     state.mkdir(parents=True, exist_ok=True)
     os.chmod(state, 0o750)
+    if hasattr(os, 'geteuid') and os.geteuid() == 0:
+        import grp
+        os.chown(state, -1, grp.getgrnam('sing-box').gr_gid)
     cert = cert_dir / 'fullchain.pem'
     key = cert_dir / 'privkey.pem'
     if not cert.is_file() or not key.is_file():
@@ -105,11 +113,15 @@ def render(state: Path, cert_dir: Path, config: Path, subs: Path,
     }
     # Don't replace the running configuration until the caller has checked it.
     pending = config.with_name(config.name + '.next')
-    save(pending, json.dumps(proxy, indent=2) + '\n', 0o640)
+    save(pending, json.dumps(proxy, indent=2) + '\n', 0o640, group='sing-box')
     subs.mkdir(parents=True, exist_ok=True)
+    os.chmod(subs, 0o750)
+    if hasattr(os, 'geteuid') and os.geteuid() == 0:
+        import grp
+        os.chown(subs, -1, grp.getgrnam('www-data').gr_gid)
     for name, links in all_links.items():
         encoded = base64.b64encode(('\n'.join(links) + '\n').encode()).decode() + '\n'
-        save(subs / name, encoded, 0o640)
+        save(subs / name, encoded, 0o640, group='www-data')
     token_file = state / 'source-token'
     if not token_file.exists():
         save(token_file, secrets.token_urlsafe(36) + '\n')
