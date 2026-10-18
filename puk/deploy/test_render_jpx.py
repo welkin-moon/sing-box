@@ -11,6 +11,21 @@ spec.loader.exec_module(mod)
 
 
 class RendererTests(unittest.TestCase):
+    def test_rejects_symlinked_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            state = d / 'state'
+            state.mkdir()
+            tls = d / 'tls'
+            tls.mkdir()
+            (tls / 'fullchain.pem').write_text('fixture')
+            (tls / 'privkey.pem').write_text('fixture')
+            bad = d / 'config'
+            bad.symlink_to(d / 'other')
+            with self.assertRaises(ValueError):
+                mod.render(state, tls, bad, d / 'subs',
+                           'jpx.example.org', 'www.example.org', 'sing-box', 8)
+
     def test_idempotent_and_no_insecure_tls(self):
         with tempfile.TemporaryDirectory() as root:
             r = Path(root)
