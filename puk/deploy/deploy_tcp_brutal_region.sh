@@ -16,12 +16,13 @@ DOWN=
 STATE=/etc/puk/tcp-brutal
 
 usage() {
-  printf '%s\n' 'Usage: deploy_tcp_brutal_region.sh --check|--deploy --region NAME --tls-sni HOST --identity-file PRIVATE_JSON --hostnames-file FAMILY_JSON --up-mbps N --down-mbps N [--port N]'
+  printf '%s\n' 'Usage: deploy_tcp_brutal_region.sh --check|--stage|--deploy --region NAME --tls-sni HOST --identity-file PRIVATE_JSON --hostnames-file FAMILY_JSON --up-mbps N --down-mbps N'
   exit 2
 }
 while (( $# > 0 )); do
   case "$1" in
     --check) MODE=check; shift ;;
+    --stage) MODE=stage; shift ;;
     --deploy) MODE=deploy; shift ;;
     --region) REGION=$2; shift 2 ;;
     --tls-sni) SNI=$2; shift 2 ;;
@@ -29,8 +30,6 @@ while (( $# > 0 )); do
     --hostnames-file) HOSTNAMES=$2; shift 2 ;;
     --up-mbps) UP=$2; shift 2 ;;
     --down-mbps) DOWN=$2; shift 2 ;;
-    --cert-dir) CERT=$2; shift 2 ;;
-    --port) PORT=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -49,6 +48,10 @@ if systemctl cat puk-tcp-brutal-canary.service >/dev/null 2>&1; then
 fi
 
 bash "$BASE/install_tcp_brutal_v2.sh" --check
+if [[ "$MODE" == check ]]; then
+  echo 'Read-only preflight complete; no files or services modified.'
+  exit 0
+fi
 if [[ "$MODE" == deploy ]]; then
   bash "$BASE/install_tcp_brutal_v2.sh" --install
 fi
@@ -67,7 +70,7 @@ python3 "$BASE/render_tcp_brutal_canary.py" \
   --output "$BUNDLE"
 chmod 0600 "$BUNDLE"
 echo 'Rendered private per-user canary; do not upload bundle to GitHub.'
-if [[ "$MODE" == check ]]; then
+if [[ "$MODE" == stage ]]; then
   if grep -qw brutal /proc/sys/net/ipv4/tcp_available_congestion_control; then
     bash "$BASE/activate_tcp_brutal_canary.sh" --check "$BUNDLE"
   else
