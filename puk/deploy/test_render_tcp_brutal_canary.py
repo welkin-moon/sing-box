@@ -45,6 +45,27 @@ class CanaryConfigTests(unittest.TestCase):
             self.assertNotIn('insecure', client['tls'])
             self.assertEqual(client['multiplex']['protocol'], 'smux')
 
+    def test_eight_subscribers_have_independent_outbounds(self):
+        self.identities['users'] = {
+            f'ss{i}': f'123e4567-e89b-12d3-a456-{426614174000 + i:012d}'
+            for i in range(1, 9)
+        }
+        result = self.render()
+        sources = result['client_canary_outbounds_by_user']
+        self.assertEqual(len(sources), 8)
+        self.assertEqual(set(sources), {f'ss{i}' for i in range(1, 9)})
+        ids = set()
+        for name, families in sources.items():
+            self.assertEqual(set(families), {'v4', 'v6', 'dual'})
+            own = {v['uuid'] for v in families.values()}
+            self.assertEqual(len(own), 1)
+            ids.update(own)
+            self.assertTrue(all(v['tls']['server_name'] == 'jpx.example.org'
+                                for v in families.values()))
+        self.assertEqual(len(ids), 8)
+        self.assertEqual(result['client_canary_outbounds']['v4'],
+                         sources['ss1']['v4'])
+
     def test_rate_must_be_measured_valid_integer(self):
         for invalid in (0, -1, True, '40', 100001):
             with self.subTest(invalid=invalid):
