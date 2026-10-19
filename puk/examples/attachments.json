@@ -1,0 +1,12 @@
+[
+  {
+    "source_tag": "UK-Google-WARP-Reality",
+    "tag": "UK-Cloudflared-Access",
+    "tunnel": {
+      "name": "UK-Access",
+      "hostname": "tcp.example.com",
+      "listen": "127.0.0.1:19443",
+      "binary": "C:\\Program Files\\cloudflared\\cloudflared.exe"
+    }
+  }
+]

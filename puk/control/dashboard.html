@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Puk 控制台</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #172033; background: #f4f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1020px; margin: 42px auto; padding: 0 22px 36px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    h1 { margin: 0 0 7px; font-size: 28px; letter-spacing: .02em; }
+    h2 { font-size: 16px; margin: 0 0 16px; }
+    h3 { font-size: 15px; margin: 0; }
+    p { color: #65718a; line-height: 1.6; margin: 0; }
+    .subtitle { max-width: 680px; }
+    .version-pill, .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 5px 10px; color: #46536c; background: #edf0f6; font-size: 12px; font-weight: 650; white-space: nowrap; }
+    section { background: #fff; border: 1px solid #e3e8f0; border-radius: 14px; padding: 21px; margin: 15px 0; box-shadow: 0 4px 16px #17203308; }
+    label { display: block; color: #46536c; font-size: 13px; font-weight: 650; margin: 0 0 7px; }
+    input, select { width: 100%; border: 1px solid #cbd3e1; background: #fff; border-radius: 8px; padding: 10px 12px; font: inherit; color: inherit; outline: none; }
+    input:focus, select:focus { border-color: #526ee8; box-shadow: 0 0 0 3px #526ee81c; }
+    input:disabled, select:disabled { color: #8b95a8; background: #f5f6f9; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button { min-height: 40px; border: 0; border-radius: 8px; padding: 9px 15px; background: #526ee8; color: #fff; font: inherit; font-weight: 650; cursor: pointer; transition: background .15s ease, opacity .15s ease; }
+    button:hover:not(:disabled) { background: #405bd0; }
+    button.secondary { color: #35415c; background: #edf0f6; }
+    button.secondary:hover:not(:disabled) { background: #e1e6f0; }
+    button:disabled { opacity: .58; cursor: wait; }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #message { min-height: 22px; margin-top: 12px; color: #52617b; font-size: 13px; line-height: 1.55; }
+    #message.error { color: #a32639; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .summary-item { min-width: 0; border: 1px solid #e8ebf2; border-radius: 10px; padding: 13px 14px; }
+    .summary-item dt { color: #65718a; font-size: 12px; }
+    .summary-item dd { margin: 5px 0 0; color: #172033; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+    .policy-list, .tunnel-list { display: grid; gap: 12px; }
+    .policy-card, .tunnel-card { border: 1px solid #e6eaf1; border-radius: 11px; padding: 15px; }
+    .card-heading, .candidate-heading, .tunnel-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+    .card-heading { margin-bottom: 13px; }
+    .candidate-list { display: grid; gap: 9px; }
+    .candidate { border-radius: 9px; background: #f7f8fb; padding: 11px 12px; }
+    .candidate-heading strong { font-size: 13px; overflow-wrap: anywhere; }
+    .pill.good { color: #17663c; background: #e8f6ee; }
+    .pill.bad { color: #a32639; background: #fff0f1; }
+    .pill.pending { color: #75520c; background: #fff5dc; }
+    .meta { color: #65718a; font-size: 12px; line-height: 1.55; margin-top: 6px; }
+    .probe-list { display: grid; gap: 6px; margin-top: 9px; }
+    .probe-row { border-top: 1px solid #e5e8ee; padding-top: 7px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .probe-endpoint { display: block; color: #65718a; }
+    .probe-detail { display: block; color: #35415c; }
+    .probe-detail.error { color: #a32639; }
+    .tunnel-meta { display: flex; flex-wrap: wrap; gap: 7px 14px; color: #52617b; font-size: 12px; margin-top: 10px; }
+    .notice { margin-top: 9px; padding: 9px 11px; border-radius: 8px; color: #75520c; background: #fff7e5; font-size: 12px; line-height: 1.5; }
+    .empty { border: 1px dashed #d7deea; border-radius: 9px; padding: 14px; color: #758098; font-size: 13px; }
+    @media (max-width: 640px) {
+      main { margin: 24px auto; padding: 0 14px 28px; }
+      header { display: block; }
+      .version-pill { margin-top: 12px; }
+      section { padding: 17px; }
+      .field-grid, .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Puk 控制台</h1>
+        <p class="subtitle">查看路由策略、探测结果与隧道状态，也可手动切换策略目标。</p>
+      </div>
+      <span id="version" class="version-pill">尚未连接</span>
+    </header>
+
+    <section aria-labelledby="access-title">
+      <h2 id="access-title">本地访问</h2>
+      <label for="token">访问令牌</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="输入控制令牌">
+      <div class="actions">
+        <button id="refresh" type="button" class="secondary">刷新状态</button>
+        <button id="probe" type="button">开始探测</button>
+      </div>
+      <div id="message" role="status" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="overview-title">
+      <h2 id="overview-title">运行概览</h2>
+      <dl id="summary" class="summary-grid">
+        <div class="empty">输入令牌后刷新状态。</div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="policy-title">
+      <h2 id="policy-title">路由策略与探测</h2>
+      <div id="policies" class="policy-list">
+        <div class="empty">尚未读取路由状态。</div>
+      </div>
+    </section>
+
+    <section aria-labelledby="select-title">
+      <h2 id="select-title">手动切换目标</h2>
+      <form id="select-form">
+        <div class="field-grid">
+          <div><label for="selector">选择器</label><select id="selector" name="selector" disabled><option>请先刷新状态</option></select></div>
+          <div><label for="tag">目标标签</label><select id="tag" name="tag" disabled><option>暂无候选线路</option></select></div>
+        </div>
+        <div class="actions"><button id="select-button" type="submit" disabled>切换目标</button></div>
+      </form>
+    </section>
+
+    <section aria-labelledby="tunnel-title">
+      <h2 id="tunnel-title">隧道状态</h2>
+      <div id="tunnels" class="tunnel-list">
+        <div class="empty">尚未读取隧道状态。</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const tokenField = document.getElementById("token");
+      const message = document.getElementById("message");
+      const version = document.getElementById("version");
+      const summary = document.getElementById("summary");
+      const policiesView = document.getElementById("policies");
+      const tunnelsView = document.getElementById("tunnels");
+      const selectorField = document.getElementById("selector");
+      const tagField = document.getElementById("tag");
+      const refreshButton = document.getElementById("refresh");
+      const probeButton = document.getElementById("probe");
+      const selectButton = document.getElementById("select-button");
+      let policies = [];
+      let busy = "";
+
+      const node = (name, className = "", text = "") => {
+        const result = document.createElement(name);
+        if (className) result.className = className;
+        if (text !== undefined && text !== null) result.textContent = String(text);
+        return result;
+      };
+      const isObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
+      const display = value => typeof value === "string" || typeof value === "number" ? String(value) : "—";
+      const number = value => Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+
+      function showMessage(text, isError = false) {
+        message.textContent = text;
+        message.classList.toggle("error", isError);
+      }
+
+      function syncControls() {
+        const policy = selectedPolicy();
+        const candidates = policy && Array.isArray(policy.candidates) ? policy.candidates.filter(item => item && typeof item.tag === "string" && item.tag) : [];
+        const locked = Boolean(busy);
+        refreshButton.disabled = locked;
+        probeButton.disabled = locked;
+        selectorField.disabled = locked || policies.length === 0;
+        tagField.disabled = locked || candidates.length === 0;
+        selectButton.disabled = locked || !policy || !selectorField.value || !tagField.value;
+        refreshButton.textContent = busy === "refresh" ? "正在刷新…" : "刷新状态";
+        probeButton.textContent = busy === "probe" ? "探测进行中…" : "开始探测";
+        selectButton.textContent = busy === "select" ? "正在切换…" : "切换目标";
+      }
+
+      function selectedPolicy() {
+        const index = Number(selectorField.value);
+        return Number.isInteger(index) ? policies[index] : undefined;
+      }
+
+      function candidateState(candidate) {
+        if (candidate.healthy === true) return ["可用", "good"];
+        if (number(candidate.failures) > 0 || checkedAtDate(candidate) || (Array.isArray(candidate.results) && candidate.results.length > 0)) return ["异常", "bad"];
+        return ["未检查", "pending"];
+      }
+
+      function checkedAtDate(candidate) {
+        if (typeof candidate.checked_at !== "string") return null;
+        const date = new Date(candidate.checked_at);
+        return Number.isFinite(date.getTime()) && date.getUTCFullYear() > 1 ? date : null;
+      }
+
+      function updateCandidates(preferredTag = "") {
+        const policy = selectedPolicy();
+        const candidates = policy && Array.isArray(policy.candidates) ? policy.candidates.filter(item => item && typeof item.tag === "string" && item.tag) : [];
+        tagField.replaceChildren();
+        for (const candidate of candidates) {
+          const [state] = candidateState(candidate);
+          const option = node("option", "", `${candidate.tag} · ${state}${candidate.tag === policy.current ? " · 当前" : ""}`);
+          option.value = candidate.tag;
+          tagField.append(option);
+        }
+        if (!candidates.length) {
+          const option = node("option", "", "暂无候选线路");
+          option.value = "";
+          tagField.append(option);
+          syncControls();
+          return;
+        }
+        const desired = [preferredTag, policy.current].find(tag => tag && candidates.some(item => item.tag === tag));
+        tagField.value = desired || candidates[0].tag;
+        syncControls();
+      }
+
+      function renderSummary(data, policyList, tunnelList) {
+        summary.replaceChildren();
+        const candidateCount = policyList.reduce((total, policy) => total + (Array.isArray(policy.candidates) ? policy.candidates.length : 0), 0);
+        const entries = [
+          ["版本", display(data.version)],
+          ["路由策略", `${policyList.length} 个 · ${candidateCount} 条线路`],
+          ["隧道", `${tunnelList.length} 个`]
+        ];
+        for (const [label, value] of entries) {
+          const item = node("div", "summary-item");
+          item.append(node("dt", "", label), node("dd", "", value));
+          summary.append(item);
+        }
+        version.textContent = data.version ? `版本 ${display(data.version)}` : "版本未知";
+      }
+
+      function probeErrorLabel(result) {
+        switch (result.error) {
+          case "request failed":
+            return /^https:\/\//i.test(result.url || "") ? "HTTPS/TLS 连接未完成（网络或握手失败）" : "请求未完成";
+          case "status not allowed":
+            return result.status === 403 ? "" : "HTTP 状态码不在允许范围";
+          case "response body read failed": return "响应读取失败";
+          case "response body exceeds limit": return "响应超过大小限制";
+          case "response body below minimum": return "响应内容短于要求";
+          case "invalid probe request": return "探测请求无效";
+          default: return result.error ? "探测失败（详细信息已隐藏）" : "";
+        }
+      }
+
+      function renderProbeResults(candidate) {
+        const results = Array.isArray(candidate.results) ? candidate.results : [];
+        if (!results.length) return null;
+        const list = node("div", "probe-list");
+        results.forEach((result, index) => {
+          if (!isObject(result)) return;
+          const row = node("div", "probe-row");
+          const url = typeof result.url === "string" ? result.url : "";
+          if (url) row.append(node("span", "probe-endpoint", url));
+          const errorLabel = probeErrorLabel(result);
+          let headline = result.status >= 100 ? `HTTP ${number(result.status)}` : "未收到 HTTP 响应";
+          if (result.status === 403) headline = "HTTP 403：服务器已返回 HTTP 响应；这不是 TLS 握手错误";
+          const details = [headline, errorLabel, `${number(result.bytes)} B`, `${number(result.duration_ms)} ms`].filter(Boolean).join(" · ");
+          row.append(node("span", `probe-detail${result.error ? " error" : ""}`, `探测 ${index + 1}：${details}`));
+          list.append(row);
+        });
+        return list;
+      }
+
+      function renderPolicies(policyList) {
+        policiesView.replaceChildren();
+        if (!policyList.length) {
+          policiesView.append(node("div", "empty", "没有可显示的路由策略。"));
+          return;
+        }
+        for (const policy of policyList) {
+          const card = node("article", "policy-card");
+          const heading = node("div", "card-heading");
+          heading.append(node("h3", "", display(policy.selector)));
+          heading.append(node("span", "pill", policy.current ? `当前目标：${display(policy.current)}` : "尚未选择目标"));
+          card.append(heading);
+          const candidates = Array.isArray(policy.candidates) ? policy.candidates : [];
+          const list = node("div", "candidate-list");
+          if (!candidates.length) list.append(node("div", "empty", "此策略没有候选线路。"));
+          for (const candidate of candidates) {
+            if (!isObject(candidate)) continue;
+            const item = node("div", "candidate");
+            const candidateHeading = node("div", "candidate-heading");
+            candidateHeading.append(node("strong", "", display(candidate.tag)));
+            const [stateLabel, stateClass] = candidateState(candidate);
+            candidateHeading.append(node("span", `pill ${stateClass}`, stateLabel));
+            item.append(candidateHeading);
+            const checked = checkedAtDate(candidate);
+            const checkedText = checked ? checked.toLocaleString() : "尚无检查时间";
+            item.append(node("div", "meta", `失败 ${number(candidate.failures)} 次 · 成功 ${number(candidate.successes)} 次 · 最近检查：${checkedText}`));
+            const probes = renderProbeResults(candidate);
+            if (probes) item.append(probes);
+            list.append(item);
+          }
+          card.append(list);
+          policiesView.append(card);
+        }
+      }
+
+      function tunnelStateLabel(state) {
+        return ({
+          stopped: "已停止",
+          starting: "启动中",
+          local_listener_ready: "本地监听就绪",
+          backoff: "等待重试"
+        })[state] || "状态未知";
+      }
+
+      function tunnelErrorLabel(error) {
+        return ({
+          process_start_failed: "隧道进程启动失败",
+          process_exited_before_listener: "监听就绪前进程已退出",
+          process_exited: "隧道进程已退出",
+          local_listener_timeout: "等待本地监听超时",
+          listen_endpoint_in_use: "本地监听地址已被占用"
+        })[error] || (error ? "隧道状态异常" : "");
+      }
+
+      function renderTunnels(tunnelList) {
+        tunnelsView.replaceChildren();
+        if (!tunnelList.length) {
+          tunnelsView.append(node("div", "empty", "没有配置隧道。"));
+          return;
+        }
+        tunnelList.forEach((tunnel, index) => {
+          if (!isObject(tunnel)) return;
+          const card = node("article", "tunnel-card");
+          const heading = node("div", "tunnel-heading");
+          heading.append(node("h3", "", `隧道 ${Number.isInteger(tunnel.index) ? tunnel.index + 1 : index + 1}`));
+          heading.append(node("span", `pill ${tunnel.local_listener_ready ? "good" : "pending"}`, tunnelStateLabel(tunnel.state)));
+          card.append(heading);
+          card.append(node("div", "tunnel-meta", `本地监听：${tunnel.local_listener_ready ? "就绪" : "未就绪"} · 身份验证：${tunnel.authentication_verified ? "已验证" : "未验证"} · 重启尝试：${number(tunnel.attempts)}`));
+          if (tunnel.authentication_verified !== true) card.append(node("div", "notice", "身份验证尚未确认；该隧道可能需要交互式登录。"));
+          const errorLabel = tunnelErrorLabel(tunnel.last_error);
+          if (errorLabel) card.append(node("div", "probe-detail error", errorLabel));
+          tunnelsView.append(card);
+        });
+      }
+
+      function renderStatus(data, preferredSelector = "", preferredTag = "") {
+        if (!isObject(data)) throw new Error("状态数据格式异常。");
+        const oldPolicy = selectedPolicy();
+        const oldSelector = oldPolicy && oldPolicy.selector;
+        const routing = isObject(data.routing) ? data.routing : {};
+        policies = Array.isArray(routing.policies) ? routing.policies.filter(item => isObject(item) && typeof item.selector === "string" && item.selector) : [];
+        const tunnelList = Array.isArray(data.tunnels) ? data.tunnels.filter(isObject) : [];
+        renderSummary(data, policies, tunnelList);
+        renderPolicies(policies);
+        renderTunnels(tunnelList);
+
+        const selected = policies.findIndex(item => item.selector === preferredSelector);
+        const fallback = policies.findIndex(item => item.selector === oldSelector);
+        selectorField.replaceChildren();
+        policies.forEach((policy, index) => {
+          const option = node("option", "", `${policy.selector}${policy.current ? ` · 当前 ${policy.current}` : ""}`);
+          option.value = String(index);
+          selectorField.append(option);
+        });
+        if (!policies.length) {
+          const option = node("option", "", "暂无可切换策略");
+          option.value = "";
+          selectorField.append(option);
+        } else {
+          selectorField.value = String(selected >= 0 ? selected : fallback >= 0 ? fallback : 0);
+        }
+        updateCandidates(preferredTag);
+      }
+
+      async function request(path, method, body) {
+        if (!tokenField.value) {
+          const error = new Error("请先输入访问令牌。");
+          error.kind = "token";
+          throw error;
+        }
+        const headers = { Authorization: `Bearer ${tokenField.value}` };
+        const options = { method, headers, credentials: "same-origin", mode: "same-origin", cache: "no-store" };
+        if (body !== undefined) {
+          headers["Content-Type"] = "application/json";
+          options.body = JSON.stringify(body);
+        }
+        let response;
+        try {
+          response = await fetch(path, options);
+        } catch (_) {
+          const error = new Error("无法连接控制服务，请确认服务正在运行并使用本机地址访问。");
+          error.kind = "network";
+          throw error;
+        }
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(typeof data.error === "string" ? data.error : "请求失败。");
+          error.status = response.status;
+          throw error;
+        }
+        return data;
+      }
+
+      function friendlyError(error, operation) {
+        if (error && error.kind === "token") return "请先输入访问令牌。";
+        if (error && error.kind === "network") return error.message;
+        if (error && error.status === 401) return "访问令牌无效，请检查后重试。";
+        if (error && error.status === 403) return "请求被本地来源校验拒绝（403）。请使用同一回环主机和协议访问控制台；若页面经过 HTTPS/TLS 代理而控制端实际使用 HTTP，请直接打开本机 HTTP 地址。";
+        if (error && error.status === 502 && operation === "probe") return "探测未能完成；底层错误详情已隐藏。可刷新状态查看安全的探测结果分类。";
+        if (error && error.status === 502) return "切换未能完成；底层错误详情已隐藏。";
+        const known = {
+          "selector and tag are required": "请选择策略和目标线路。",
+          "invalid JSON body": "请求格式无效，请重试。",
+          "request body too large": "请求内容超过大小限制。",
+          "not found": "控制接口不存在。",
+          "control backend unavailable": "控制服务暂不可用。"
+        };
+        if (error && known[error.message]) return known[error.message];
+        return error && error.status ? `请求失败（HTTP ${error.status}）。` : "请求失败，请重试。";
+      }
+
+      async function run(operation, action) {
+        if (busy) return;
+        busy = operation;
+        syncControls();
+        showMessage(operation === "probe" ? "正在探测候选线路，完成时间取决于线路数量。" : "正在处理…");
+        try {
+          await action();
+        } catch (error) {
+          showMessage(friendlyError(error, operation), true);
+        } finally {
+          busy = "";
+          syncControls();
+        }
+      }
+
+      async function loadStatus(preferredSelector = "", preferredTag = "") {
+        const data = await request("/api/status", "GET");
+        renderStatus(data, preferredSelector, preferredTag);
+      }
+
+      refreshButton.addEventListener("click", () => run("refresh", async () => {
+        await loadStatus();
+        showMessage("状态已更新。");
+      }));
+
+      probeButton.addEventListener("click", () => run("probe", async () => {
+        try {
+          await request("/api/probe", "POST", {});
+        } catch (error) {
+          if (error.status === 502) await loadStatus().catch(() => {});
+          throw error;
+        }
+        try {
+          await loadStatus();
+          showMessage("探测已完成，状态已更新。");
+        } catch (_) {
+          showMessage("探测已完成，但状态刷新失败。", true);
+        }
+      }));
+
+      selectorField.addEventListener("change", () => updateCandidates());
+      document.getElementById("select-form").addEventListener("submit", event => {
+        event.preventDefault();
+        const policy = selectedPolicy();
+        const tag = tagField.value;
+        if (!policy || !tag) return;
+        run("select", async () => {
+          await request("/api/select", "POST", { selector: policy.selector, tag });
+          try {
+            await loadStatus(policy.selector, tag);
+            showMessage("目标已切换，状态已更新。");
+          } catch (_) {
+            showMessage("目标已切换，但状态刷新失败。", true);
+          }
+        });
+      });
+
+      syncControls();
+    })();
+  </script>
+</body>
+</html>

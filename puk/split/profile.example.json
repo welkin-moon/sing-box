@@ -1,0 +1,15 @@
+{
+  "name": "TW-Split-CFup-HY2down-direct",
+  "upload_host": "upload.example.org",
+  "upload_port": 443,
+  "path": "/split/",
+  "uuid": "01234567-89ab-cdef-0123-456789abcdef",
+  "backend_port": 18084,
+  "download": {
+    "server": "192.0.2.1",
+    "port": 11389,
+    "password": "REPLACE_LOCALLY",
+    "server_name": "hy2.example.org",
+    "certificate_sha256": "abababababababababababababababababababababababababababababababab"
+  }
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/protocol/anytls"
 	"github.com/sagernet/sing-box/protocol/block"
+	"github.com/sagernet/sing-box/protocol/bond"
 	"github.com/sagernet/sing-box/protocol/bridge"
 	"github.com/sagernet/sing-box/protocol/direct"
 	"github.com/sagernet/sing-box/protocol/group"
@@ -82,6 +83,7 @@ func InboundRegistry() *inbound.Registry {
 func OutboundRegistry() *outbound.Registry {
 	registry := outbound.NewRegistry()
 
+	bond.RegisterOutbound(registry)
 	direct.RegisterOutbound(registry)
 	bridge.RegisterOutbound(registry)
 
