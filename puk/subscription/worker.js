@@ -478,7 +478,15 @@ function removeRedundantMatrixDual(links) {
 
 function renameReadablePUKLinks(links) {
   const items=[];
-  const addresses={"82.152.18.242":"UK","2a12:bec4:1bd1::54":"UK","78.31.249.77":"DE","107.173.122.239":"US","152.175.35.20":"JP"};
+  // Bare-IP -> region overrides are deploy-time configuration, never committed.
+  // Set the PUK_REGION_HOSTS Worker variable (JSON, e.g. {"203.0.113.10":"UK"})
+  // in the Cloudflare dashboard to label bare-IP links; without it the
+  // heuristics below apply and unknown hosts fall back to "UK".
+  let addresses={};
+  try {
+    const raw=(typeof PUK_REGION_HOSTS!=="undefined"&&PUK_REGION_HOSTS)||"";
+    addresses=typeof raw==="string"?(raw?JSON.parse(raw):{}):(raw||{});
+  } catch(_) { addresses={}; }
   const modes={"Direct":"direct","Google-WARP":"google","All-WARP":"all"};
   for (const [raw,value] of links) {
     try {
